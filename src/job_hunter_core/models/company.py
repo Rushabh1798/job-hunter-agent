@@ -3,14 +3,14 @@
 from __future__ import annotations
 
 from datetime import datetime
-from enum import Enum
+from enum import StrEnum
 from typing import Literal
 from uuid import UUID, uuid4
 
 from pydantic import BaseModel, Field, HttpUrl
 
 
-class ATSType(str, Enum):
+class ATSType(StrEnum):
     """Applicant Tracking System types."""
 
     GREENHOUSE = "greenhouse"

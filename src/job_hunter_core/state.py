@@ -143,7 +143,7 @@ class PipelineState:
         })
         return RunResult(
             run_id=self.config.run_id,
-            status=status,  # type: ignore[arg-type]
+            status=status,
             companies_attempted=len(self.companies),
             companies_succeeded=companies_succeeded,
             jobs_scraped=len(self.raw_jobs),

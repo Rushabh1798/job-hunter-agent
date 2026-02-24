@@ -18,7 +18,10 @@ class DiskCacheClient:
 
     async def get(self, key: str) -> str | None:
         """Retrieve a value by key."""
-        return await asyncio.to_thread(self._cache.get, key)  # type: ignore[return-value]
+        result = await asyncio.to_thread(self._cache.get, key)
+        if result is None:
+            return None
+        return str(result)
 
     async def set(self, key: str, value: str, ttl_seconds: int = 86400) -> None:
         """Store a value with TTL."""

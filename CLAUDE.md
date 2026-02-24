@@ -90,6 +90,7 @@ uv run pytest                  # all tests
 - Coverage target: 80%
 
 ## Recent Changes
+- Phase 5: Agent implementations — BaseAgent with instructor/tenacity, 8 agents (resume parser, prefs parser, company finder, jobs scraper, job processor, jobs scorer, aggregator, notifier), 5 prompt templates
 - Phase 4: Tools layer — PDF parser, ATS clients (Greenhouse/Lever/Ashby/Workday), web scraper (crawl4ai + Playwright), web search (Tavily), embedder (local + Voyage + cached), email sender (SMTP + SendGrid)
 - Phase 3: Infrastructure layer (DB, cache, vector similarity)
 - Phase 2: Core models, config, interfaces, and state

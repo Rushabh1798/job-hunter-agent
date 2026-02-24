@@ -16,8 +16,8 @@ from job_hunter_core.models.run import (
 )
 
 __all__ = [
-    "AgentError",
     "ATSType",
+    "AgentError",
     "CandidateProfile",
     "CareerPage",
     "Company",

@@ -106,6 +106,12 @@ module = [
     "apscheduler.*",
     "langsmith",
     "langsmith.*",
+    "pandas",
+    "pandas.*",
+    "openpyxl",
+    "openpyxl.*",
+    "instructor",
+    "instructor.*",
 ]
 ignore_missing_imports = true
 follow_imports = "skip"

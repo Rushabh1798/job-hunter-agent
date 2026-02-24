@@ -80,9 +80,9 @@ class SearchPreferences(BaseModel):
     excluded_titles: list[str] = Field(
         default_factory=list, description="Job titles to exclude"
     )
-    org_types: list[
-        Literal["startup", "scaleup", "enterprise", "nonprofit", "government", "agency", "any"]
-    ] = Field(default_factory=lambda: ["any"], description="Preferred organization types")
+    org_types: list[str] = Field(
+        default_factory=lambda: ["any"], description="Preferred organization types"
+    )
     company_sizes: list[
         Literal["1-10", "11-50", "51-200", "201-500", "501-1000", "1001+"]
     ] = Field(default_factory=list, description="Preferred company sizes")

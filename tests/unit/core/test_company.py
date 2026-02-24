@@ -20,7 +20,7 @@ class TestATSType:
 
     def test_string_coercion(self) -> None:
         """ATSType behaves as a string."""
-        assert str(ATSType.GREENHOUSE) == "ATSType.GREENHOUSE"
+        assert str(ATSType.GREENHOUSE) == "greenhouse"
 
 
 @pytest.mark.unit

@@ -90,4 +90,8 @@ uv run pytest                  # all tests
 - Coverage target: 80%
 
 ## Recent Changes
+- Phase 4: Tools layer — PDF parser, ATS clients (Greenhouse/Lever/Ashby/Workday), web scraper (crawl4ai + Playwright), web search (Tavily), embedder (local + Voyage + cached), email sender (SMTP + SendGrid)
+- Phase 3: Infrastructure layer (DB, cache, vector similarity)
+- Phase 2: Core models, config, interfaces, and state
+- Phase 1: Project scaffold and monorepo structure
 - Phase 0: Created CLAUDE.md and PLAN.md

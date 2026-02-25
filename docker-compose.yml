@@ -49,9 +49,16 @@ services:
   temporal:
     image: temporalio/auto-setup:latest
     environment:
-      - DB=sqlite
+      - DB=postgres12_pgx
+      - POSTGRES_SEEDS=postgres
+      - POSTGRES_USER=postgres
+      - POSTGRES_PWD=dev
+      - DB_PORT=5432
     ports:
       - "7233:7233"
+    depends_on:
+      postgres:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "temporal", "operator", "cluster", "health"]
       interval: 10s

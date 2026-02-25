@@ -1,0 +1,69 @@
+# Version control
+.git
+.gitignore
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Virtual environments
+.venv/
+venv/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Environment / secrets
+.env
+
+# Output and data
+output/
+*.db
+data/
+
+# Testing
+tests/
+.coverage
+htmlcov/
+.pytest_cache/
+
+# Caches
+.mypy_cache/
+.ruff_cache/
+.cache/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Claude Code
+.claude/
+
+# Docs (not needed in image)
+PLAN.md
+PROMPT.md
+CONTRIBUTING.md
+CHANGELOG.md
+SECURITY.md
+LICENSE
+README.md
+
+# GitHub
+.github/
+
+# Alembic (unused in MVP)
+alembic/
+
+# Personal / scratch
+global.claude.md
+test.py

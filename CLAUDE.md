@@ -12,19 +12,26 @@ Monorepo for an autonomous multi-agent job discovery system. Accepts a resume PD
 - **AD-5**: `--lite` mode uses SQLite + local embeddings, zero Docker dependencies
 - **AD-6**: instructor library for structured LLM output via Anthropic SDK
 - **AD-7**: crawl4ai for career page scraping (Playwright under the hood)
+- **AD-8**: Docker image ~3-4GB (PyTorch + Chromium); CPU-only torch wheels deferred
 - **6 layers**: Entry/CLI -> Orchestrator -> Parsing -> Company Discovery -> Scraping -> Matching/Output
 - LangGraph used only inside CompanyFinderAgent and JobsScorerAgent for multi-step LLM reasoning
 - Top-level pipeline is a simple async sequential pipeline, NOT LangGraph
 
 ## Build & Run
 ```bash
-uv sync
-uv run playwright install chromium
-uv run pytest -m unit                    # unit tests
-uv run ruff check .                      # lint
-uv run mypy .                            # type check
-uv run job-hunter run resume.pdf --prefs "..." --lite   # run in lite mode
-uv run job-hunter run resume.pdf --prefs "..." --dry-run  # no email
+# Native (local Python)
+make install                             # uv sync + playwright
+make test                                # unit tests
+make lint                                # ruff + mypy
+make run ARGS='resume.pdf --prefs "..."' # run with postgres + redis
+make run-lite ARGS='resume.pdf --prefs "..." --dry-run'  # SQLite, no Docker
+
+# Docker
+make dev                                 # start postgres + redis
+make dev-down                            # stop infra
+make docker-build                        # build image
+make docker-run ARGS='--prefs "..."'     # run in full Docker (resume in data/)
+make docker-run-lite ARGS='--prefs "..."' # run lite in Docker
 ```
 
 ## Key Files
@@ -68,8 +75,7 @@ uv run job-hunter run resume.pdf --prefs "..." --dry-run  # no email
 - Test files mirror source: `agents/scorer.py` -> `tests/unit/agents/test_scorer.py`
 
 ## Known Issues / TODOs
-- Phases 0-7 complete (core, infra, tools, agents, pipeline, CLI, observability, testing)
-- Phase 8: Docker + local dev — TODO
+- Phases 0-8 complete (core, infra, tools, agents, pipeline, CLI, observability, testing, Docker)
 - Phase 9: GitHub open source standards — TODO
 - Temporal orchestration deferred to Phase 2 (post-MVP)
 - Web UI deferred to future
@@ -94,6 +100,7 @@ uv run pytest                  # all tests
 - Coverage target: 80%
 
 ## Recent Changes
+- Phase 8: Docker + local dev — multi-stage Dockerfile (python:3.12-slim, uv, Playwright Chromium), docker-compose with postgres (pgvector:pg16) + redis (7-alpine) + app service (profiles: full), self-documenting Makefile (help, dev, dev-down, docker-build, docker-run, docker-run-lite, format, clean-docker), .dockerignore, uv.lock now tracked, .env.example Docker section
 - Phase 7: Testing — shared test factories (mock_settings, mock_factories), 53 new tests covering PipelineState serialization, checkpoint I/O, BaseAgent (_call_llm, _track_cost, _record_error), Pipeline orchestration, CLI entrypoint; 217 total tests passing, zero ruff warnings
 - Phase 6: Observability — structlog config (JSON/console), OTEL tracing (none/console/otlp), LangSmith env setup, CostTracker + extract_token_usage, wired cost tracking into _call_llm, pipeline run context + tracing + cost summary, 27 new tests
 - Rectification: Aligned PLAN.md and CLAUDE.md with actual code; removed stale Temporal references from MVP sections; updated cache references from diskcache to Redis/DB

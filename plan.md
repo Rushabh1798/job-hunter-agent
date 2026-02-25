@@ -566,3 +566,34 @@ All 8 agents remain unchanged. Activities wrap agent `.run()` methods. This mean
 8. **Unit tests** (3 test files)
 9. **Integration tests** (conftest + test file)
 10. **Docs** (CLAUDE.md, .env.example, SPEC_04)
+
+---
+
+## Phase 12b: Pre-merge Hardening (completed)
+
+Code review before merging to main identified 15 issues. All fixed:
+
+### Critical
+- **Temporal determinism**: Replaced `time.monotonic()` with `workflow.time()` in `temporal_workflow.py` — `time.monotonic()` is non-deterministic and breaks Temporal workflow replay
+
+### Source code fixes
+- **Misleading docstrings**: Removed "cached per process" claim from `_get_settings()`, removed "cost guardrail enforcement" claim from module docstring
+- **Type annotations**: Replaced 3 `Any` return types with proper `Settings`, `PipelineState` types using `TYPE_CHECKING` imports
+- **Resource leak**: `check_temporal_available()` now closes the gRPC channel after testing connectivity
+- **TLS misconfiguration**: Warns when only one of cert/key path is set (was silently falling back to no TLS)
+- **Silent error dropping**: `_to_run_result()` now logs non-dict errors instead of silently discarding
+- **Status derivation**: `_build_output()` returns `"partial"` when errors exist (was hardcoded `"success"`)
+- **Function length**: Refactored 71-line `run()` into loop-based pattern with `_run_and_extract()` helper
+- **Mutation pattern**: `_scrape_parallel()` returns `(tokens, cost)` tuple instead of redundant `(snapshot, tokens, cost)`
+
+### Test/infra fixes
+- **30s penalty**: Temporal health check in conftest is now lazy + cached (max 3s only when needed)
+- **Unused fixture**: Removed `temporal_client` fixture from conftest
+- **Weak assertion**: CLI test asserts `exit_code == 0` (was `in (0, 1)` which always passes)
+- **File split**: `test_repositories.py` (432 lines) split into two files under 300 lines each
+- **Dryrun test mypy errors**: Replaced direct imports with `importlib` + `getattr` pattern
+
+### CI/DevOps
+- **Pre-commit hook**: Added mypy to `scripts/pre-commit` and `.pre-commit-config.yaml`, now mirrors CI lint job exactly
+- **Ruff version alignment**: Updated `.pre-commit-config.yaml` from v0.8.6 to v0.15.2 to match lockfile
+- **Coverage target**: Updated CLAUDE.md to reflect actual 85% threshold (was 80%)

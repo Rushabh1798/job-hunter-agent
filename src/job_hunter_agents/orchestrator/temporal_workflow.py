@@ -3,14 +3,12 @@
 Orchestrates the 8-step pipeline as Temporal activities with:
 - Per-activity retry policies and timeouts
 - Per-company parallel scraping (Step 4)
-- Cost guardrail enforcement between steps
 - Task queue routing (default, LLM, scraping)
 """
 
 from __future__ import annotations
 
 import asyncio
-import time
 from datetime import timedelta
 from typing import Any
 
@@ -59,86 +57,58 @@ class JobHuntWorkflow:
     @workflow.run  # type: ignore[misc,untyped-decorator]
     async def run(self, input: WorkflowInput) -> WorkflowOutput:
         """Execute the full job hunt pipeline as Temporal activities."""
-        start = time.monotonic()
+        start = workflow.time()
+        state_snapshot = self._build_initial_snapshot(input)
+
+        # Steps defined as (activity_name, task_queue, retry_policy, timeout_minutes)
+        steps: list[tuple[str, str, RetryPolicy, int]] = [
+            (PARSE_RESUME, input.default_queue, _DEFAULT_RETRY, 2),
+            (PARSE_PREFS, input.default_queue, _DEFAULT_RETRY, 1),
+            (FIND_COMPANIES, input.llm_queue, _LLM_RETRY, 5),
+        ]
+
         total_tokens = 0
         total_cost = 0.0
 
-        # Build initial state snapshot from WorkflowInput
-        state_snapshot = self._build_initial_snapshot(input)
-
-        # Step 1: parse_resume
-        result = await self._run_step(
-            PARSE_RESUME, state_snapshot, input.default_queue, _DEFAULT_RETRY, minutes=2
-        )
-        state_snapshot, tokens, cost = self._extract(result)
-        total_tokens += tokens
-        total_cost += cost
-
-        # Step 2: parse_prefs
-        result = await self._run_step(
-            PARSE_PREFS, state_snapshot, input.default_queue, _DEFAULT_RETRY, minutes=1
-        )
-        state_snapshot, tokens, cost = self._extract(result)
-        total_tokens += tokens
-        total_cost += cost
-
-        # Step 3: find_companies (LLM-heavy)
-        result = await self._run_step(
-            FIND_COMPANIES, state_snapshot, input.llm_queue, _LLM_RETRY, minutes=5
-        )
-        state_snapshot, tokens, cost = self._extract(result)
-        total_tokens += tokens
-        total_cost += cost
+        # Steps 1-3: sequential agent steps
+        for name, queue, retry, timeout in steps:
+            state_snapshot, tokens, cost = await self._run_and_extract(
+                name, state_snapshot, queue, retry, timeout
+            )
+            total_tokens += tokens
+            total_cost += cost
 
         # Step 4: scrape_jobs — parallel per company
-        state_snapshot, tokens, cost = await self._scrape_parallel(state_snapshot, input)
-        total_tokens += tokens
-        total_cost += cost
+        scrape_tokens, scrape_cost = await self._scrape_parallel(state_snapshot, input)
+        total_tokens += scrape_tokens
+        total_cost += scrape_cost
 
-        # Step 5: process_jobs (LLM)
-        result = await self._run_step(
-            PROCESS_JOBS, state_snapshot, input.llm_queue, _DEFAULT_RETRY, minutes=5
-        )
-        state_snapshot, tokens, cost = self._extract(result)
-        total_tokens += tokens
-        total_cost += cost
+        # Steps 5-8: sequential post-scraping agent steps
+        post_steps: list[tuple[str, str, RetryPolicy, int]] = [
+            (PROCESS_JOBS, input.llm_queue, _DEFAULT_RETRY, 5),
+            (SCORE_JOBS, input.llm_queue, _LLM_RETRY, 5),
+            (AGGREGATE, input.default_queue, _DEFAULT_RETRY, 2),
+            (NOTIFY, input.default_queue, _DEFAULT_RETRY, 1),
+        ]
+        for name, queue, retry, timeout in post_steps:
+            state_snapshot, tokens, cost = await self._run_and_extract(
+                name, state_snapshot, queue, retry, timeout
+            )
+            total_tokens += tokens
+            total_cost += cost
 
-        # Step 6: score_jobs (LLM-heavy)
-        result = await self._run_step(
-            SCORE_JOBS, state_snapshot, input.llm_queue, _LLM_RETRY, minutes=5
-        )
-        state_snapshot, tokens, cost = self._extract(result)
-        total_tokens += tokens
-        total_cost += cost
-
-        # Step 7: aggregate
-        result = await self._run_step(
-            AGGREGATE, state_snapshot, input.default_queue, _DEFAULT_RETRY, minutes=2
-        )
-        state_snapshot, tokens, cost = self._extract(result)
-        total_tokens += tokens
-        total_cost += cost
-
-        # Step 8: notify
-        result = await self._run_step(
-            NOTIFY, state_snapshot, input.default_queue, _DEFAULT_RETRY, minutes=1
-        )
-        state_snapshot, tokens, cost = self._extract(result)
-        total_tokens += tokens
-        total_cost += cost
-
-        duration = time.monotonic() - start
+        duration = workflow.time() - start
         return self._build_output(state_snapshot, total_tokens, total_cost, duration)
 
-    async def _run_step(
+    async def _run_and_extract(
         self,
         activity_name: str,
         state_snapshot: dict[str, Any],
         task_queue: str,
         retry_policy: RetryPolicy,
         minutes: int,
-    ) -> StepResult:
-        """Execute a single agent step activity."""
+    ) -> tuple[dict[str, Any], int, float]:
+        """Execute a single agent step and return (snapshot, tokens, cost)."""
         result: StepResult = await workflow.execute_activity(
             activity_name,
             StepInput(state_snapshot=state_snapshot),
@@ -146,19 +116,19 @@ class JobHuntWorkflow:
             start_to_close_timeout=timedelta(minutes=minutes),
             retry_policy=retry_policy,
         )
-        return result
+        return result.state_snapshot, result.tokens_used, result.cost_usd
 
     async def _scrape_parallel(
         self,
         state_snapshot: dict[str, Any],
         input: WorkflowInput,
-    ) -> tuple[dict[str, Any], int, float]:
-        """Scrape all companies in parallel, merge results back."""
+    ) -> tuple[int, float]:
+        """Scrape all companies in parallel, merge results into state_snapshot."""
         companies = state_snapshot.get("companies", [])
         config_data = state_snapshot.get("config", {})
 
         if not companies:
-            return state_snapshot, 0, 0.0
+            return 0, 0.0
 
         tasks = [
             workflow.execute_activity(
@@ -172,8 +142,8 @@ class JobHuntWorkflow:
         ]
         results: list[ScrapeCompanyResult] = await asyncio.gather(*tasks)
 
-        all_raw_jobs = []
-        all_errors = []
+        all_raw_jobs: list[dict[str, Any]] = []
+        all_errors: list[dict[str, Any]] = []
         total_tokens = 0
         total_cost = 0.0
         for r in results:
@@ -183,12 +153,11 @@ class JobHuntWorkflow:
             total_cost += r.cost_usd
 
         state_snapshot["raw_jobs"] = all_raw_jobs
-        existing_errors = state_snapshot.get("errors", [])
-        state_snapshot["errors"] = existing_errors + all_errors
+        state_snapshot["errors"] = state_snapshot.get("errors", []) + all_errors
         state_snapshot["total_tokens"] = state_snapshot.get("total_tokens", 0) + total_tokens
         state_snapshot["total_cost_usd"] = state_snapshot.get("total_cost_usd", 0.0) + total_cost
 
-        return state_snapshot, total_tokens, total_cost
+        return total_tokens, total_cost
 
     @staticmethod
     def _build_initial_snapshot(input: WorkflowInput) -> dict[str, Any]:
@@ -216,11 +185,6 @@ class JobHuntWorkflow:
         }
 
     @staticmethod
-    def _extract(result: StepResult) -> tuple[dict[str, Any], int, float]:
-        """Extract snapshot, tokens, and cost from a StepResult."""
-        return result.state_snapshot, result.tokens_used, result.cost_usd
-
-    @staticmethod
     def _build_output(
         snapshot: dict[str, Any],
         total_tokens: int,
@@ -236,8 +200,10 @@ class JobHuntWorkflow:
 
         output_files = run_result.get("output_files", []) if isinstance(run_result, dict) else []
 
+        status = "partial" if errors else "success"
+
         return WorkflowOutput(
-            status="success",
+            status=status,
             companies_attempted=len(companies),
             companies_succeeded=len({j.get("company_id") for j in raw_jobs if isinstance(j, dict)}),
             jobs_scraped=len(raw_jobs),

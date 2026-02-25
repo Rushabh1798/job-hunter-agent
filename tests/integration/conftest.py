@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import functools
 import logging
 import socket
 import time
-from collections.abc import AsyncGenerator, Generator
+from collections.abc import AsyncGenerator, Callable, Generator
 from contextlib import ExitStack
+from typing import Any
 
 import pytest
 import pytest_asyncio
@@ -44,8 +46,17 @@ def _tcp_reachable(
 
 _pg_up = _tcp_reachable("localhost", 5432)
 _redis_up = _tcp_reachable("localhost", 6379)
-# Temporal takes longer to start (~30s); use more retries with longer delay
-_temporal_up = _tcp_reachable("localhost", 7233, retries=15, delay=2.0)
+
+
+@functools.cache
+def _is_temporal_up() -> bool:
+    """Check Temporal availability lazily (cached after first call).
+
+    Uses only 3 retries with 1s delay (max 3s) to avoid penalizing
+    test runs when Temporal is not running.
+    """
+    return _tcp_reachable("localhost", 7233, retries=3, delay=1.0)
+
 
 skip_no_postgres = pytest.mark.skipif(
     not _pg_up,
@@ -55,10 +66,28 @@ skip_no_redis = pytest.mark.skipif(
     not _redis_up,
     reason="Redis not reachable on localhost:6379 — run `make dev` first",
 )
-skip_no_temporal = pytest.mark.skipif(
-    not _temporal_up,
-    reason="Temporal not reachable on localhost:7233 — run `make dev-temporal` first",
-)
+
+
+def skip_no_temporal[F: Callable[..., Any]](func: F) -> F:
+    """Skip decorator for tests requiring Temporal (lazy check)."""
+
+    @functools.wraps(func)
+    def wrapper(*args: Any, **kwargs: Any) -> Any:  # noqa: ANN401
+        if not _is_temporal_up():
+            pytest.skip("Temporal not reachable on localhost:7233 — run `make dev-temporal` first")
+        return func(*args, **kwargs)
+
+    @functools.wraps(func)
+    async def async_wrapper(*args: Any, **kwargs: Any) -> Any:  # noqa: ANN401
+        if not _is_temporal_up():
+            pytest.skip("Temporal not reachable on localhost:7233 — run `make dev-temporal` first")
+        return await func(*args, **kwargs)
+
+    import asyncio
+
+    if asyncio.iscoroutinefunction(func):
+        return async_wrapper  # type: ignore[return-value]
+    return wrapper  # type: ignore[return-value]
 
 
 # ---------------------------------------------------------------------------
@@ -179,20 +208,3 @@ def dry_run_patches() -> Generator[ExitStack, None, None]:
     stack = activate_dry_run_patches()
     yield stack
     stack.close()
-
-
-# ---------------------------------------------------------------------------
-# Temporal fixtures
-# ---------------------------------------------------------------------------
-
-
-@pytest_asyncio.fixture
-async def temporal_client() -> AsyncGenerator[object, None]:
-    """Connect to local Temporal dev server for integration tests.
-
-    Requires Temporal on localhost:7233 (CI service container or `make dev-temporal`).
-    """
-    from temporalio.client import Client
-
-    client = await Client.connect("localhost:7233")
-    yield client

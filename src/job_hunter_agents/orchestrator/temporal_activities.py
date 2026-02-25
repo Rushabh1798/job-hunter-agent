@@ -8,9 +8,13 @@ agent's .run(), and extracts the relevant output.
 from __future__ import annotations
 
 import json
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from temporalio import activity
+
+if TYPE_CHECKING:
+    from job_hunter_core.config.settings import Settings
+    from job_hunter_core.state import PipelineState
 
 from job_hunter_agents.orchestrator.temporal_payloads import (
     ScrapeCompanyInput,
@@ -20,14 +24,14 @@ from job_hunter_agents.orchestrator.temporal_payloads import (
 )
 
 
-def _get_settings() -> Any:  # noqa: ANN401
-    """Load settings from worker environment (cached per process)."""
+def _get_settings() -> Settings:
+    """Load settings from worker environment (new instance per call)."""
     from job_hunter_core.config.settings import Settings
 
     return Settings()  # type: ignore[call-arg]
 
 
-def _state_from_snapshot(snapshot: dict[str, Any]) -> Any:  # noqa: ANN401
+def _state_from_snapshot(snapshot: dict[str, Any]) -> PipelineState:
     """Reconstruct PipelineState from a checkpoint snapshot dict."""
     from job_hunter_core.models.run import PipelineCheckpoint
     from job_hunter_core.state import PipelineState
@@ -40,7 +44,7 @@ def _state_from_snapshot(snapshot: dict[str, Any]) -> Any:  # noqa: ANN401
     return PipelineState.from_checkpoint(checkpoint)
 
 
-def _state_to_snapshot(state: Any, step_name: str) -> dict[str, Any]:  # noqa: ANN401
+def _state_to_snapshot(state: PipelineState, step_name: str) -> dict[str, Any]:
     """Serialize PipelineState to a checkpoint snapshot dict."""
     checkpoint = state.to_checkpoint(step_name)
     result: dict[str, Any] = json.loads(checkpoint.model_dump_json())["state_snapshot"]

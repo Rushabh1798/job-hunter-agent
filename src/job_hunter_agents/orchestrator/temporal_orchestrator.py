@@ -100,6 +100,8 @@ class TemporalOrchestrator:
         for e in output.errors:
             if isinstance(e, dict):
                 errors.append(AgentError(**e))
+            else:
+                logger.warning("temporal_non_dict_error", raw_error=repr(e))
 
         return RunResult(
             run_id=run_id,

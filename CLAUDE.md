@@ -44,12 +44,11 @@ make docker-run-lite ARGS='--prefs "..."' # run lite in Docker
 - `src/job_hunter_core/models/` — All Pydantic domain models
 - `src/job_hunter_core/config/settings.py` — pydantic-settings configuration
 - `src/job_hunter_agents/agents/` — All 8 agent implementations
-- `src/job_hunter_agents/orchestrator/pipeline.py` — Pipeline with checkpoints
+- `src/job_hunter_agents/orchestrator/pipeline.py` — Sequential async pipeline with checkpoints
 - `src/job_hunter_agents/prompts/` — Versioned LLM prompt templates
 - `src/job_hunter_agents/tools/` — PDF parser, ATS clients, scraper, search, embedder
 - `src/job_hunter_infra/db/` — SQLAlchemy ORM, repositories, migrations
 - `src/job_hunter_infra/cache/` — Redis + DB-backed cache implementations
-- `src/job_hunter_agents/orchestrator/pipeline.py` — Sequential async pipeline with checkpoints
 - `src/job_hunter_agents/orchestrator/checkpoint.py` — Checkpoint serialization/deserialization
 - `src/job_hunter_agents/orchestrator/temporal_workflow.py` — Temporal workflow definition
 - `src/job_hunter_agents/orchestrator/temporal_activities.py` — Temporal activity wrappers
@@ -129,9 +128,11 @@ make test-live                 # run live tests only
 - Live E2E tests: real APIs, company_limit=1, cost guardrail < $2.00
 - Fixtures: `tests/fixtures/` has sample PDF, LLM response JSONs, ATS responses, HTML
 - Fakes: `tests/mocks/mock_tools.py` (named tool fakes), `tests/mocks/mock_llm.py` (LLM dispatcher)
-- Coverage target: 80%
+- Coverage target: 85%
+- Pre-commit hook mirrors CI: ruff check + ruff format + mypy + unit tests (85% coverage)
 
 ## Recent Changes
+- Phase 12b: Pre-merge hardening — fixed Temporal workflow determinism (`workflow.time()` not `time.monotonic()`), added mypy to pre-commit hook matching CI, aligned ruff version in `.pre-commit-config.yaml` with lockfile (v0.15.2), fixed misleading docstrings, refactored 70-line `run()` into loop-based pattern, split 432-line test file, lazy Temporal health check in conftest (no 30s penalty), fixed resource leak in `check_temporal_available`, proper TLS misconfiguration warning, derive workflow status from errors (`partial` vs `success`), log non-dict errors instead of silently dropping, fixed weak CLI test assertion
 - Phase 12: Temporal orchestration — Temporal workflow/activities wrapping existing agents, per-company parallel scraping, TemporalOrchestrator with automatic checkpoint fallback, Temporal client factory (plain TCP/mTLS/API key auth), worker CLI command (`job-hunter worker --queue`), docker-compose Temporal service + UI, `make dev-temporal` / `make run-temporal` / `make worker`, unit tests (client, workflow, orchestrator, activities), integration tests (connection + fallback), `--temporal` CLI flag, updated CLAUDE.md + .env.example
 - Phase 11: Component spec files — 11 spec files in `docs/specs/` + `docs/SPEC_INDEX.md` for AI context switching. Each spec documents public API, data flow, dependencies, configuration, error handling, testing, and modification patterns.
 - Phase 10b: OTEL tracing wiring — pipeline produces root span + per-agent child spans with cost/error attributes, `get_tracer()` / `configure_tracing_with_exporter()` / `disable_tracing()` helpers, `--trace` CLI flag for OTLP, Jaeger in docker-compose (trace profile), `make dev-trace` / `make run-trace`, InMemorySpanExporter integration tests, 4 new unit tests for tracing helpers

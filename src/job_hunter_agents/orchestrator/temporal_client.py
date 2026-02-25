@@ -55,10 +55,12 @@ async def create_temporal_client(settings: Settings) -> Client:
 async def check_temporal_available(settings: Settings) -> bool:
     """Test if Temporal server is reachable. Returns False on failure."""
     try:
-        await create_temporal_client(settings)
+        client = await create_temporal_client(settings)
     except TemporalConnectionError:
         return False
-    return True
+    else:
+        await client.service_client.channel.close()
+        return True
 
 
 def _build_tls_config(settings: Settings) -> TLSConfig | bool:
@@ -72,6 +74,14 @@ def _build_tls_config(settings: Settings) -> TLSConfig | bool:
         with open(key_path, "rb") as f:
             client_key = f.read()
         return TLSConfig(client_cert=client_cert, client_private_key=client_key)
+
+    if cert_path or key_path:
+        logger.warning(
+            "temporal_tls_incomplete",
+            cert_path=str(cert_path),
+            key_path=str(key_path),
+            hint="Both tls_cert_path and tls_key_path must be set for mTLS",
+        )
 
     return False
 

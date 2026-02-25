@@ -169,7 +169,10 @@ make dev-trace     # start Postgres + Redis + Jaeger
 make dev-temporal  # start Postgres + Redis + Temporal + UI
 make dev-down      # stop infrastructure
 make worker        # start Temporal worker (default queue)
+make hooks         # install pre-commit hook (ruff + mypy + tests)
 ```
+
+The pre-commit hook mirrors CI: ruff check, ruff format, mypy, and unit tests with 85% coverage gate. This ensures no commit can break the CI lint or test jobs.
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for branch naming, commit conventions, architecture rules, and checklists for adding ATS clients or agents.
 

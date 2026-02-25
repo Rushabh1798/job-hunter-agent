@@ -170,7 +170,7 @@ def test_cli_temporal_flag_with_fallback() -> None:
             "JH_TAVILY_API_KEY": "fake-key",
         },
     )
-    assert result.exit_code in (0, 1), (
+    assert result.exit_code == 0, (
         f"CLI --temporal failed with code {result.exit_code}: {result.output}"
     )
     assert "Orchestrator: Temporal" in result.output

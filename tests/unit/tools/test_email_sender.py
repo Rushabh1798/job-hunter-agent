@@ -132,9 +132,7 @@ class TestEmailSender:
         mock_sg_client.send.return_value = mock_response
 
         with patch("sendgrid.SendGridAPIClient", return_value=mock_sg_client):
-            result = await sender._send_sendgrid(
-                "to@example.com", "Subject", "<p>html</p>", "text"
-            )
+            result = await sender._send_sendgrid("to@example.com", "Subject", "<p>html</p>", "text")
 
         assert result is True
         mock_sg_client.send.assert_called_once()

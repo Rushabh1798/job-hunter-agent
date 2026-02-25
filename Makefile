@@ -3,7 +3,7 @@
 ARGS ?=
 QUEUE ?= default
 
-.PHONY: help install dev dev-down dev-trace dev-temporal test test-int test-all lint format \
+.PHONY: help install hooks dev dev-down dev-trace dev-temporal test test-int test-all lint format \
         run run-lite run-trace run-temporal worker \
         docker-build docker-run docker-run-lite clean clean-docker
 
@@ -12,6 +12,11 @@ help: ## Show this help message
 
 install: ## Install dependencies and Playwright Chromium
 	uv sync && uv run playwright install chromium
+
+hooks: ## Install git pre-commit hooks (lint + tests + coverage)
+	@cp scripts/pre-commit .git/hooks/pre-commit
+	@chmod +x .git/hooks/pre-commit
+	@echo "Pre-commit hook installed (.git/hooks/pre-commit)"
 
 dev: ## Start postgres + redis, wait for health checks
 	docker compose up -d

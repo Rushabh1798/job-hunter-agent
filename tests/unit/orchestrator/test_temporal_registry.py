@@ -19,7 +19,7 @@ class TestLazyAgentMap:
 
     def test_loads_all_registered_agents(self) -> None:
         """All 8 agents can be loaded from the registry."""
-        from job_hunter_agents.orchestrator.temporal_registry import AGENT_MAP, _AGENT_PATHS
+        from job_hunter_agents.orchestrator.temporal_registry import _AGENT_PATHS, AGENT_MAP
 
         for name in _AGENT_PATHS:
             cls = AGENT_MAP[name]

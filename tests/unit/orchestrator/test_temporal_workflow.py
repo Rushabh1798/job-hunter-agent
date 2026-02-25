@@ -205,9 +205,7 @@ class TestScrapeParallel:
             errors=[{"error": "timeout"}],
         )
 
-        with patch(
-            "job_hunter_agents.orchestrator.temporal_workflow.workflow"
-        ) as mock_wf:
+        with patch("job_hunter_agents.orchestrator.temporal_workflow.workflow") as mock_wf:
             mock_wf.execute_activity = AsyncMock(side_effect=[result1, result2])
 
             result_snapshot, tokens, cost = await wf._scrape_parallel(snapshot, input)
@@ -227,9 +225,7 @@ class TestRunStep:
         wf = JobHuntWorkflow()
         expected_result = _make_step_result()
 
-        with patch(
-            "job_hunter_agents.orchestrator.temporal_workflow.workflow"
-        ) as mock_wf:
+        with patch("job_hunter_agents.orchestrator.temporal_workflow.workflow") as mock_wf:
             mock_wf.execute_activity = AsyncMock(return_value=expected_result)
 
             from job_hunter_agents.orchestrator.temporal_workflow import _DEFAULT_RETRY

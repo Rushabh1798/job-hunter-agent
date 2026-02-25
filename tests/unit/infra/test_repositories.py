@@ -348,9 +348,7 @@ class TestRunRepository:
         """List recent runs ordered by creation time."""
         repo = RunRepository(session)
         for i in range(5):
-            await repo.create(
-                RunHistoryModel(run_id=f"run-{i:03d}", status="completed")
-            )
+            await repo.create(RunHistoryModel(run_id=f"run-{i:03d}", status="completed"))
         results = await repo.list_recent(limit=3)
         assert len(results) == 3
 

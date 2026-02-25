@@ -7,7 +7,7 @@ Monorepo for an autonomous multi-agent job discovery system. Accepts a resume PD
 - **Monorepo** with four packages under `src/`: `job_hunter_core`, `job_hunter_agents`, `job_hunter_infra`, `job_hunter_cli`
 - **AD-1**: PostgreSQL + pgvector for relational + vector storage (no standalone vector DB)
 - **AD-2**: Async pipeline with JSON checkpoint files for crash recovery (MVP); Temporal planned for Phase 2
-- **AD-3**: diskcache for persistent caching (no Redis)
+- **AD-3**: Redis for persistent caching (default), DB-backed cache fallback for `--lite` mode. diskcache removed.
 - **AD-4**: Local sentence-transformers embeddings by default; Voyage API optional
 - **AD-5**: `--lite` mode uses SQLite + local embeddings, zero Docker dependencies
 - **AD-6**: instructor library for structured LLM output via Anthropic SDK
@@ -35,7 +35,9 @@ uv run job-hunter run resume.pdf --prefs "..." --dry-run  # no email
 - `src/job_hunter_agents/prompts/` — Versioned LLM prompt templates
 - `src/job_hunter_agents/tools/` — PDF parser, ATS clients, scraper, search, embedder
 - `src/job_hunter_infra/db/` — SQLAlchemy ORM, repositories, migrations
-- `src/job_hunter_infra/cache/` — diskcache implementation
+- `src/job_hunter_infra/cache/` — Redis + DB-backed cache implementations
+- `src/job_hunter_agents/orchestrator/pipeline.py` — Sequential async pipeline with checkpoints
+- `src/job_hunter_agents/orchestrator/checkpoint.py` — Checkpoint serialization/deserialization
 - `src/job_hunter_cli/main.py` — typer CLI entrypoint
 
 ## Dependencies
@@ -46,7 +48,7 @@ uv run job-hunter run resume.pdf --prefs "..." --dry-run  # no email
 - **Database**: SQLAlchemy async, asyncpg (Postgres), aiosqlite (SQLite)
 - **Vector**: pgvector (Postgres mode), NumPy brute-force (SQLite mode)
 - **Embeddings**: sentence-transformers (local), Voyage API (optional)
-- **Cache**: diskcache
+- **Cache**: redis (default), DB-backed (fallback for --lite)
 - **Email**: SendGrid or SMTP via aiosmtplib
 - **CLI**: typer + rich
 - **Observability**: structlog, LangSmith (optional), tenacity
@@ -66,7 +68,10 @@ uv run job-hunter run resume.pdf --prefs "..." --dry-run  # no email
 - Test files mirror source: `agents/scorer.py` -> `tests/unit/agents/test_scorer.py`
 
 ## Known Issues / TODOs
-- Phase 0: Initial planning phase — no code yet
+- Phases 0-6 complete (core, infra, tools, agents, pipeline, CLI, observability)
+- Phase 7: Comprehensive testing (80% coverage) — TODO
+- Phase 8: Docker + local dev — TODO
+- Phase 9: GitHub open source standards — TODO
 - Temporal orchestration deferred to Phase 2 (post-MVP)
 - Web UI deferred to future
 
@@ -90,7 +95,10 @@ uv run pytest                  # all tests
 - Coverage target: 80%
 
 ## Recent Changes
-- Phase 5: Agent implementations — BaseAgent with instructor/tenacity, 8 agents (resume parser, prefs parser, company finder, jobs scraper, job processor, jobs scorer, aggregator, notifier), 5 prompt templates
+- Phase 6: Observability — structlog config (JSON/console), OTEL tracing (none/console/otlp), LangSmith env setup, CostTracker + extract_token_usage, wired cost tracking into _call_llm, pipeline run context + tracing + cost summary, 27 new tests
+- Rectification: Aligned PLAN.md and CLAUDE.md with actual code; removed stale Temporal references from MVP sections; updated cache references from diskcache to Redis/DB
+- Phase 5: Agent implementations — BaseAgent with instructor/tenacity, 8 agents, 5 prompt templates, sequential async pipeline with checkpoints, typer CLI
+- Cache migration: Replaced diskcache with Redis (default) + DB-backed cache (--lite fallback)
 - Phase 4: Tools layer — PDF parser, ATS clients (Greenhouse/Lever/Ashby/Workday), web scraper (crawl4ai + Playwright), web search (Tavily), embedder (local + Voyage + cached), email sender (SMTP + SendGrid)
 - Phase 3: Infrastructure layer (DB, cache, vector similarity)
 - Phase 2: Core models, config, interfaces, and state

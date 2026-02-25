@@ -12,6 +12,7 @@ from anthropic import AsyncAnthropic
 from pydantic import BaseModel
 from tenacity import retry, stop_after_attempt, wait_exponential
 
+from job_hunter_agents.observability.cost_tracker import extract_token_usage
 from job_hunter_core.constants import TOKEN_PRICES
 from job_hunter_core.exceptions import CostLimitExceededError
 from job_hunter_core.models.run import AgentError
@@ -93,11 +94,18 @@ class BaseAgent(ABC):
         result = await _do_call()
         elapsed = time.monotonic() - start
 
+        input_tokens, output_tokens = extract_token_usage(result)
+
+        if state is not None:
+            self._track_cost(state, input_tokens, output_tokens, model)
+
         logger.debug(
             "llm_call_complete",
             agent=self.agent_name,
             model=model,
             duration=round(elapsed, 2),
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
         )
         return result
 

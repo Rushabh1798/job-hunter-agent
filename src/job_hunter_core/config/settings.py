@@ -65,9 +65,13 @@ class Settings(BaseSettings):
     )
 
     # --- Cache ---
-    cache_dir: Path = Field(
-        default=Path("./.cache/job_hunter"),
-        description="Directory for diskcache persistent cache",
+    cache_backend: Literal["redis", "db"] = Field(
+        default="redis",
+        description="Cache backend implementation: 'redis' (default) or 'db'",
+    )
+    redis_url: str = Field(
+        default="redis://localhost:6379/0",
+        description="Redis connection URL for cache_backend=redis",
     )
     cache_ttl_hours: int = Field(
         default=24,
@@ -112,6 +116,28 @@ class Settings(BaseSettings):
     langsmith_project: str = Field(
         default="job-hunter-agent",
         description="LangSmith project name",
+    )
+
+    # --- Observability ---
+    log_format: Literal["json", "console"] = Field(
+        default="console",
+        description="Log output format: 'json' for production, 'console' for development",
+    )
+    log_level: str = Field(
+        default="INFO",
+        description="Logging level (DEBUG, INFO, WARNING, ERROR)",
+    )
+    otel_exporter: Literal["none", "console", "otlp"] = Field(
+        default="none",
+        description="OpenTelemetry exporter: 'none' (off), 'console', or 'otlp'",
+    )
+    otel_endpoint: str = Field(
+        default="http://localhost:4317",
+        description="OTLP exporter endpoint URL",
+    )
+    otel_service_name: str = Field(
+        default="job-hunter-agent",
+        description="OpenTelemetry service name",
     )
 
     # --- Scraping ---
@@ -168,6 +194,12 @@ class Settings(BaseSettings):
         description="Directory for checkpoint files",
     )
 
+    # --- Agent Execution ---
+    agent_timeout_seconds: int = Field(
+        default=300,
+        description="Per-agent execution timeout in seconds",
+    )
+
     # --- Cost Guardrails ---
     max_cost_per_run_usd: float = Field(
         default=5.0,
@@ -183,6 +215,14 @@ class Settings(BaseSettings):
         """Set database_url from postgres_url when using postgres backend."""
         if self.db_backend == "postgres":
             self.database_url = self.postgres_url
+        return self
+
+    @model_validator(mode="after")
+    def validate_cache_config(self) -> Settings:
+        """Validate cache backend configuration."""
+        if self.cache_backend == "redis" and not self.redis_url:
+            msg = "redis_url required when cache_backend=redis"
+            raise ValueError(msg)
         return self
 
     @model_validator(mode="after")

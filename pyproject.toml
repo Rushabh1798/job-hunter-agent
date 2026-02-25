@@ -28,7 +28,7 @@ dependencies = [
     "alembic>=1.13",
     "pgvector>=0.3",
     # Caching
-    "diskcache>=5.6",
+    "redis>=5.0",
     # Embeddings (local fallback)
     "sentence-transformers>=3.0",
     "numpy>=1.26",
@@ -46,6 +46,9 @@ dependencies = [
     "structlog>=24.0",
     "langsmith>=0.1",
     "tenacity>=8.2",
+    "opentelemetry-api>=1.20",
+    "opentelemetry-sdk>=1.20",
+    "opentelemetry-exporter-otlp>=1.20",
     # Scheduling
     "apscheduler>=3.10",
     # HTTP client
@@ -96,8 +99,6 @@ module = [
     "pypdf.*",
     "sentence_transformers",
     "sentence_transformers.*",
-    "diskcache",
-    "diskcache.*",
     "docling",
     "docling.*",
     "aiosmtplib",
@@ -112,6 +113,8 @@ module = [
     "openpyxl.*",
     "instructor",
     "instructor.*",
+    "opentelemetry",
+    "opentelemetry.*",
 ]
 ignore_missing_imports = true
 follow_imports = "skip"

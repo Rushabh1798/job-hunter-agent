@@ -32,6 +32,28 @@ jobs:
 
   test:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_DB: jobhunter
+          POSTGRES_PASSWORD: dev
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d jobhunter"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 5
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v4
@@ -45,12 +67,24 @@ jobs:
       - name: Install Playwright Chromium
         run: uv run playwright install chromium --with-deps
       - name: Run unit tests with coverage
-        run: uv run pytest -m unit --cov=src --cov-report=xml --cov-fail-under=80
+        run: uv run pytest -m unit --cov=src --cov-report=xml --cov-report=html --cov-fail-under=80
+      - name: Run integration tests
+        run: uv run pytest -m integration -v
+      - name: Run e2e dry-run smoke test
+        env:
+          JH_ANTHROPIC_API_KEY: fake-key
+          JH_TAVILY_API_KEY: fake-key
+        run: >
+          uv run job-hunter run tests/fixtures/sample_resume.pdf
+          --prefs "Python backend remote roles at AI startups"
+          --dry-run --lite --company-limit 1
       - name: Upload coverage
         uses: actions/upload-artifact@v4
         with:
           name: coverage-report
-          path: coverage.xml
+          path: |
+            coverage.xml
+            htmlcov/
 
   docker:
     runs-on: ubuntu-latest

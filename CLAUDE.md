@@ -68,8 +68,7 @@ uv run job-hunter run resume.pdf --prefs "..." --dry-run  # no email
 - Test files mirror source: `agents/scorer.py` -> `tests/unit/agents/test_scorer.py`
 
 ## Known Issues / TODOs
-- Phases 0-6 complete (core, infra, tools, agents, pipeline, CLI, observability)
-- Phase 7: Comprehensive testing (80% coverage) — TODO
+- Phases 0-7 complete (core, infra, tools, agents, pipeline, CLI, observability, testing)
 - Phase 8: Docker + local dev — TODO
 - Phase 9: GitHub open source standards — TODO
 - Temporal orchestration deferred to Phase 2 (post-MVP)
@@ -95,6 +94,7 @@ uv run pytest                  # all tests
 - Coverage target: 80%
 
 ## Recent Changes
+- Phase 7: Testing — shared test factories (mock_settings, mock_factories), 53 new tests covering PipelineState serialization, checkpoint I/O, BaseAgent (_call_llm, _track_cost, _record_error), Pipeline orchestration, CLI entrypoint; 217 total tests passing, zero ruff warnings
 - Phase 6: Observability — structlog config (JSON/console), OTEL tracing (none/console/otlp), LangSmith env setup, CostTracker + extract_token_usage, wired cost tracking into _call_llm, pipeline run context + tracing + cost summary, 27 new tests
 - Rectification: Aligned PLAN.md and CLAUDE.md with actual code; removed stale Temporal references from MVP sections; updated cache references from diskcache to Redis/DB
 - Phase 5: Agent implementations — BaseAgent with instructor/tenacity, 8 agents, 5 prompt templates, sequential async pipeline with checkpoints, typer CLI

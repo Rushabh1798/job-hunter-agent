@@ -547,8 +547,8 @@ State (TypedDict):
 | 4 | Phase 3 | Infrastructure (DB, cache, embedder) | DONE |
 | 5 | Phase 4 | Tools (PDF, ATS, browser, search) | DONE |
 | 6 | Phase 5 | All 8 agents + pipeline + CLI | DONE (includes former Phase 6) |
-| 7 | Phase 6 | Observability (logging, tracing, cost tracking) | TODO |
-| 8 | Phase 7 | Testing + self-improvement (80% coverage) | TODO |
+| 7 | Phase 6 | Observability (logging, tracing, cost tracking) | DONE |
+| 8 | Phase 7 | Testing + self-improvement (80% coverage) | DONE |
 | 9 | Phase 8 | Docker + local dev | TODO |
 | 10 | Phase 9 | GitHub open source standards (README, CI) | TODO |
 

@@ -24,7 +24,9 @@ from job_hunter_infra.db.models import Base
 # ---------------------------------------------------------------------------
 
 
-def _tcp_reachable(host: str, port: int, timeout: float = 1.0, retries: int = 5) -> bool:
+def _tcp_reachable(
+    host: str, port: int, timeout: float = 1.0, retries: int = 5, delay: float = 0.5,
+) -> bool:
     """Check if a TCP service is reachable, retrying on failure."""
     for attempt in range(retries):
         try:
@@ -32,13 +34,14 @@ def _tcp_reachable(host: str, port: int, timeout: float = 1.0, retries: int = 5)
                 return True
         except OSError:
             if attempt < retries - 1:
-                time.sleep(0.5)
+                time.sleep(delay)
     return False
 
 
 _pg_up = _tcp_reachable("localhost", 5432)
 _redis_up = _tcp_reachable("localhost", 6379)
-_temporal_up = _tcp_reachable("localhost", 7233)
+# Temporal takes longer to start (~30s); use more retries with longer delay
+_temporal_up = _tcp_reachable("localhost", 7233, retries=15, delay=2.0)
 
 skip_no_postgres = pytest.mark.skipif(
     not _pg_up,
@@ -181,10 +184,10 @@ def dry_run_patches() -> Generator[ExitStack, None, None]:
 
 @pytest_asyncio.fixture
 async def temporal_client() -> AsyncGenerator[object, None]:
-    """Connect to local Temporal dev server for integration tests."""
-    if not _temporal_up:
-        pytest.skip("Temporal not available")
+    """Connect to local Temporal dev server for integration tests.
 
+    Requires Temporal on localhost:7233 (CI service container or `make dev-temporal`).
+    """
     from temporalio.client import Client
 
     client = await Client.connect("localhost:7233")

@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: ["**"]
   pull_request:
     branches: [main]
 
@@ -54,6 +54,18 @@ jobs:
           --health-interval 5s
           --health-timeout 3s
           --health-retries 5
+      temporal:
+        image: temporalio/auto-setup:latest
+        env:
+          DB: sqlite
+        ports:
+          - 7233:7233
+        options: >-
+          --health-cmd "temporal operator cluster health"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 15
+          --health-start-period 30s
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v4
@@ -70,7 +82,7 @@ jobs:
         run: uv run pytest -m unit --cov=src --cov-report=xml --cov-report=html --cov-fail-under=80
       - name: Run integration tests
         run: uv run pytest -m integration -v
-      - name: Run e2e dry-run smoke test
+      - name: E2E dry-run — checkpoint pipeline
         env:
           JH_ANTHROPIC_API_KEY: fake-key
           JH_TAVILY_API_KEY: fake-key
@@ -79,6 +91,15 @@ jobs:
           uv run job-hunter run tests/fixtures/sample_resume.pdf
           --prefs "Python backend remote roles at AI startups"
           --dry-run --lite --company-limit 1
+      - name: E2E dry-run — Temporal pipeline (with fallback)
+        env:
+          JH_ANTHROPIC_API_KEY: fake-key
+          JH_TAVILY_API_KEY: fake-key
+          PYTHONPATH: .
+        run: >
+          uv run job-hunter run tests/fixtures/sample_resume.pdf
+          --prefs "Python backend remote roles at AI startups"
+          --dry-run --lite --company-limit 1 --temporal
       - name: Upload coverage
         uses: actions/upload-artifact@v4
         with:

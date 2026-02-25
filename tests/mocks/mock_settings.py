@@ -25,6 +25,9 @@ def make_settings(**overrides: object) -> MagicMock:
     settings.db_backend = "sqlite"
     settings.embedding_provider = "local"
     settings.cache_backend = "db"
+    settings.otel_exporter = "none"
+    settings.otel_endpoint = "http://localhost:4317"
+    settings.otel_service_name = "job-hunter-test"
 
     for key, value in overrides.items():
         setattr(settings, key, value)

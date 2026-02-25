@@ -1,0 +1,81 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792]
+   /Resources << /Font << /F1 4 0 R >> >>
+   /Contents 5 0 R
+>>
+endobj
+
+4 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+
+5 0 obj
+<< /Length 1112 >>
+stream
+BT
+/F1 11 Tf
+72 750 Td
+(Jane Doe) Tj
+72 735 Td
+(Senior Software Engineer) Tj
+72 720 Td
+(jane@example.com | San Francisco, CA) Tj
+72 705 Td
+() Tj
+72 690 Td
+(Summary) Tj
+72 675 Td
+(Experienced software engineer with 5+ years building web applications using Python, TypeScript, and cloud infrastructure. Strong background in API design, data pipelines, and machine learning systems.) Tj
+72 660 Td
+() Tj
+72 645 Td
+(Skills) Tj
+72 630 Td
+(Python, TypeScript, SQL, PostgreSQL, Redis, Docker, AWS, FastAPI, React, Machine Learning, Data Engineering) Tj
+72 615 Td
+() Tj
+72 600 Td
+(Experience) Tj
+72 585 Td
+(Senior Software Engineer - TechCorp \(2021-Present\)) Tj
+72 570 Td
+(Led development of data pipeline processing 10M records daily. Built ML-powered recommendation engine. Mentored junior engineers.) Tj
+72 555 Td
+() Tj
+72 540 Td
+(Software Engineer - StartupXYZ \(2019-2021\)) Tj
+72 525 Td
+(Full-stack development with Python/FastAPI backend and React frontend. Designed RESTful APIs serving 50k daily users.) Tj
+72 510 Td
+() Tj
+72 495 Td
+(Education) Tj
+72 480 Td
+(B.S. Computer Science - UC Berkeley \(2019\)) Tj
+ET
+endstream
+endobj
+
+xref
+0 6
+0000000000 65535 f 
+0000000009 00000 n 
+0000000059 00000 n 
+0000000117 00000 n 
+0000000250 00000 n 
+0000000321 00000 n 
+
+trailer
+<< /Size 6 /Root 1 0 R >>
+startxref
+1486
+%%EOF

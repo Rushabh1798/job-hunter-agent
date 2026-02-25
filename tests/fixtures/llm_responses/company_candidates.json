@@ -1,0 +1,32 @@
+{
+  "_meta": {
+    "input_tokens": 350,
+    "output_tokens": 200,
+    "model": "claude-sonnet-4-5-20250514"
+  },
+  "data": {
+    "companies": [
+      {
+        "name": "Acme Corp",
+        "domain": "acmecorp.com",
+        "industry": "AI/ML",
+        "size": "100-500",
+        "description": "AI-powered developer tools startup"
+      },
+      {
+        "name": "DataFlow Inc",
+        "domain": "dataflow.io",
+        "industry": "Data Engineering",
+        "size": "50-200",
+        "description": "Real-time data pipeline platform"
+      },
+      {
+        "name": "CloudNova",
+        "domain": "cloudnova.dev",
+        "industry": "Cloud Infrastructure",
+        "size": "200-1000",
+        "description": "Cloud-native infrastructure company"
+      }
+    ]
+  }
+}

@@ -38,6 +38,7 @@ def run(
     resume_from: str | None = typer.Option(
         None, "--resume-from", help="Resume from checkpoint run_id"
     ),
+    trace: bool = typer.Option(False, "--trace", help="Enable OTLP tracing (requires Jaeger)"),
     verbose: bool = typer.Option(False, "-v", "--verbose", help="Enable debug logging"),
 ) -> None:
     """Run the job hunter pipeline."""
@@ -74,13 +75,26 @@ def run(
     if verbose:
         settings.log_level = "DEBUG"
 
+    if trace:
+        settings.otel_exporter = "otlp"
+
     configure_logging(settings)
     configure_tracing(settings)
 
     console.print(f"[bold green]Starting run:[/bold green] {config.run_id}")
 
-    pipeline = Pipeline(settings)
-    result = asyncio.run(pipeline.run(config))
+    patch_stack = None
+    if dry_run:
+        from job_hunter_agents.dryrun import activate_dry_run_patches
+
+        patch_stack = activate_dry_run_patches()
+
+    try:
+        pipeline = Pipeline(settings)
+        result = asyncio.run(pipeline.run(config))
+    finally:
+        if patch_stack is not None:
+            patch_stack.close()
 
     console.print(f"\n[bold]Run complete:[/bold] {result.status}")
     console.print(f"  Companies: {result.companies_succeeded}/{result.companies_attempted}")

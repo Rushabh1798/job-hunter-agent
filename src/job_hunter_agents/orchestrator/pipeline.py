@@ -19,6 +19,7 @@ from job_hunter_agents.agents.resume_parser import ResumeParserAgent
 from job_hunter_agents.observability import (
     bind_run_context,
     clear_run_context,
+    get_tracer,
     trace_pipeline_run,
 )
 from job_hunter_agents.orchestrator.checkpoint import (
@@ -63,53 +64,20 @@ class Pipeline:
         try:
             logger.info("pipeline_start", run_id=config.run_id)
 
-            async with trace_pipeline_run(config.run_id):
+            async with trace_pipeline_run(config.run_id) as root_span:
                 for step_name, agent_cls in PIPELINE_STEPS:
                     if step_name in state.completed_steps:
                         logger.info("step_skipped", step=step_name)
                         continue
 
-                    try:
-                        agent = agent_cls(self.settings)
-                        state = await asyncio.wait_for(
-                            agent.run(state),
-                            timeout=self.settings.agent_timeout_seconds,
-                        )
+                    result = await self._run_agent_step(
+                        step_name, agent_cls, state, start,
+                    )
+                    if isinstance(result, RunResult):
+                        return result
+                    state = result
 
-                        if self.settings.checkpoint_enabled:
-                            checkpoint = state.to_checkpoint(step_name)
-                            save_checkpoint(checkpoint, self.settings.checkpoint_dir)
-
-                    except CostLimitExceededError as e:
-                        logger.error("cost_limit_exceeded", error=str(e))
-                        duration = time.monotonic() - start
-                        self._log_cost_summary(state, duration)
-                        return state.build_result(
-                            status="partial",
-                            duration_seconds=duration,
-                        )
-
-                    except FatalAgentError as e:
-                        logger.error("fatal_agent_error", step=step_name, error=str(e))
-                        duration = time.monotonic() - start
-                        self._log_cost_summary(state, duration)
-                        return state.build_result(
-                            status="failed",
-                            duration_seconds=duration,
-                        )
-
-                    except TimeoutError:
-                        logger.error(
-                            "agent_timeout",
-                            step=step_name,
-                            timeout=self.settings.agent_timeout_seconds,
-                        )
-                        duration = time.monotonic() - start
-                        self._log_cost_summary(state, duration)
-                        return state.build_result(
-                            status="failed",
-                            duration_seconds=duration,
-                        )
+                self._set_root_span_attrs(root_span, "success", state)
 
             duration = time.monotonic() - start
             self._log_cost_summary(state, duration)
@@ -124,6 +92,89 @@ class Pipeline:
             )
         finally:
             clear_run_context()
+
+    async def _run_agent_step(
+        self,
+        step_name: str,
+        agent_cls: type[BaseAgent],
+        state: PipelineState,
+        pipeline_start: float,
+    ) -> PipelineState | RunResult:
+        """Execute a single agent step, optionally wrapped in a trace span."""
+        tracer = get_tracer()
+        span = None
+        if tracer is not None:
+            span = tracer.start_span(f"agent.{step_name}")
+            span.set_attribute("agent.name", step_name)
+
+        try:
+            agent = agent_cls(self.settings)
+            state = await asyncio.wait_for(
+                agent.run(state),
+                timeout=self.settings.agent_timeout_seconds,
+            )
+
+            if self.settings.checkpoint_enabled:
+                checkpoint = state.to_checkpoint(step_name)
+                save_checkpoint(checkpoint, self.settings.checkpoint_dir)
+
+            if span is not None:
+                span.set_attribute("agent.status", "ok")
+                span.set_attribute("agent.tokens", state.total_tokens)
+
+            return state
+
+        except CostLimitExceededError as e:
+            logger.error("cost_limit_exceeded", error=str(e))
+            if span is not None:
+                span.set_attribute("agent.status", "error")
+                span.set_attribute("agent.error", str(e))
+            duration = time.monotonic() - pipeline_start
+            self._log_cost_summary(state, duration)
+            return state.build_result(status="partial", duration_seconds=duration)
+
+        except FatalAgentError as e:
+            logger.error("fatal_agent_error", step=step_name, error=str(e))
+            if span is not None:
+                span.set_attribute("agent.status", "error")
+                span.set_attribute("agent.error", str(e))
+            duration = time.monotonic() - pipeline_start
+            self._log_cost_summary(state, duration)
+            return state.build_result(status="failed", duration_seconds=duration)
+
+        except TimeoutError:
+            logger.error(
+                "agent_timeout",
+                step=step_name,
+                timeout=self.settings.agent_timeout_seconds,
+            )
+            if span is not None:
+                span.set_attribute("agent.status", "error")
+                span.set_attribute("agent.error", "timeout")
+            duration = time.monotonic() - pipeline_start
+            self._log_cost_summary(state, duration)
+            return state.build_result(status="failed", duration_seconds=duration)
+
+        finally:
+            if span is not None:
+                span.end()
+
+    @staticmethod
+    def _set_root_span_attrs(
+        root_span: object | None,
+        status: str,
+        state: PipelineState,
+    ) -> None:
+        """Set summary attributes on the root pipeline span."""
+        if root_span is None:
+            return
+        root_span.set_attribute("pipeline.status", status)  # type: ignore[attr-defined]
+        root_span.set_attribute("pipeline.total_tokens", state.total_tokens)  # type: ignore[attr-defined]
+        root_span.set_attribute(  # type: ignore[attr-defined]
+            "pipeline.total_cost_usd", round(state.total_cost_usd, 4),
+        )
+        root_span.set_attribute("pipeline.jobs_scored", len(state.scored_jobs))  # type: ignore[attr-defined]
+        root_span.set_attribute("pipeline.errors", len(state.errors))  # type: ignore[attr-defined]
 
     @staticmethod
     def _log_cost_summary(state: PipelineState, duration: float) -> None:

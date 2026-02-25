@@ -1,0 +1,35 @@
+{
+  "_meta": {
+    "input_tokens": 1200,
+    "output_tokens": 400,
+    "model": "claude-sonnet-4-5-20250514"
+  },
+  "data": {
+    "scores": [
+      {
+        "job_index": 0,
+        "score": 88,
+        "skill_overlap": ["Python", "SQL", "AWS", "FastAPI"],
+        "skill_gaps": [],
+        "seniority_match": true,
+        "location_match": true,
+        "org_type_match": true,
+        "summary": "Strong match for this role. Candidate has all required skills and experience level aligns well with the senior position. Location and remote preferences are compatible.",
+        "recommendation": "strong_match",
+        "confidence": 0.92
+      },
+      {
+        "job_index": 1,
+        "score": 72,
+        "skill_overlap": ["Python", "PostgreSQL", "Docker"],
+        "skill_gaps": ["Kubernetes", "Go"],
+        "seniority_match": true,
+        "location_match": true,
+        "org_type_match": true,
+        "summary": "Good match overall. Candidate has most required skills but missing Kubernetes and Go experience. Growth potential in these areas.",
+        "recommendation": "good_match",
+        "confidence": 0.85
+      }
+    ]
+  }
+}

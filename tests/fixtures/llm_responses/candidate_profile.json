@@ -1,0 +1,43 @@
+{
+  "_meta": {
+    "input_tokens": 450,
+    "output_tokens": 280,
+    "model": "claude-haiku-4-5-20251001"
+  },
+  "data": {
+    "name": "Jane Doe",
+    "email": "jane@example.com",
+    "phone": null,
+    "location": "San Francisco, CA",
+    "linkedin_url": null,
+    "github_url": null,
+    "current_title": "Senior Software Engineer",
+    "years_of_experience": 5.0,
+    "skills": [
+      {"name": "Python", "level": "expert", "years": 5},
+      {"name": "TypeScript", "level": "advanced", "years": 3},
+      {"name": "SQL", "level": "advanced", "years": 5},
+      {"name": "PostgreSQL", "level": "advanced", "years": 4},
+      {"name": "Redis", "level": "intermediate", "years": 2},
+      {"name": "Docker", "level": "advanced", "years": 3},
+      {"name": "AWS", "level": "advanced", "years": 3},
+      {"name": "FastAPI", "level": "advanced", "years": 3},
+      {"name": "React", "level": "intermediate", "years": 2},
+      {"name": "Machine Learning", "level": "intermediate", "years": 2}
+    ],
+    "past_titles": ["Software Engineer", "Senior Software Engineer"],
+    "industries": ["Technology", "Software Development"],
+    "education": [
+      {
+        "degree": "B.S.",
+        "field": "Computer Science",
+        "institution": "UC Berkeley",
+        "graduation_year": 2019
+      }
+    ],
+    "seniority_level": "senior",
+    "tech_stack": ["Python", "TypeScript", "PostgreSQL", "Redis", "Docker", "AWS", "FastAPI", "React"],
+    "raw_text": "",
+    "content_hash": ""
+  }
+}

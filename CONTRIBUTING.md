@@ -54,9 +54,43 @@ make lint     # ruff check + mypy
 make test     # unit tests with coverage
 ```
 
+For changes touching the pipeline, agents, or infrastructure, also run integration tests:
+
+```bash
+make test-int   # starts Docker infra + runs integration tests
+```
+
 - Coverage must remain at or above 80%.
 - All existing tests must still pass.
 - New code must include tests.
+
+### Test Tiers
+
+| Tier | Command | What it Tests | Requirements |
+|------|---------|---------------|-------------|
+| Unit | `make test` | Pure logic, fully mocked | None |
+| Integration | `make test-int` | Real DB + cache, mocked externals | Docker (`make dev`) |
+| Live | `make test-live` | Real APIs (Anthropic, Tavily) | API keys in `.env` |
+
+### Dry-Run Mode
+
+The project supports `--dry-run` which mocks all external services (LLM, search, scraping, email) while preserving real DB and cache. This is used by:
+- Integration tests (`tests/integration/`)
+- CLI: `job-hunter run resume.pdf --prefs "..." --dry-run`
+
+Fake implementations live in `tests/mocks/` (named classes, not anonymous MagicMocks).
+
+### Tracing with Jaeger
+
+To visualize the pipeline execution flow:
+
+```bash
+make dev-trace    # start Postgres + Redis + Jaeger
+make run-trace ARGS='resume.pdf --prefs "..."'
+# Open http://localhost:16686 for the Jaeger UI
+```
+
+The `--trace` flag enables OTLP export. Each agent gets its own span with cost, token, and error attributes.
 
 ## Architecture Rules
 

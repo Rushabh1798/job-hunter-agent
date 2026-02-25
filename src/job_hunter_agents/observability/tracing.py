@@ -118,6 +118,39 @@ async def trace_pipeline_run(run_id: str) -> AsyncGenerator[Any, None]:
         yield span
 
 
+def get_tracer() -> Any:  # noqa: ANN401
+    """Return the configured tracer, or None if tracing is disabled."""
+    return _tracer
+
+
+def configure_tracing_with_exporter(
+    service_name: str,
+    exporter: Any,  # noqa: ANN401
+) -> None:
+    """Configure tracing with an explicit span exporter.
+
+    Used by tests to inject InMemorySpanExporter without reading Settings.
+    Gets tracer directly from the provider (not the global) to avoid
+    conflicts with set_tracer_provider when called multiple times.
+    """
+    global _tracer
+
+    from opentelemetry.sdk.resources import Resource
+    from opentelemetry.sdk.trace import TracerProvider
+    from opentelemetry.sdk.trace.export import SimpleSpanProcessor
+
+    resource = Resource.create({"service.name": service_name})
+    provider = TracerProvider(resource=resource)
+    provider.add_span_processor(SimpleSpanProcessor(exporter))
+    _tracer = provider.get_tracer("job-hunter-agent")
+
+
+def disable_tracing() -> None:
+    """Reset tracer to disabled state."""
+    global _tracer
+    _tracer = None
+
+
 def _maybe_init_langsmith(settings: Settings) -> None:
     """Set LangSmith env vars if an API key is configured."""
     if settings.langsmith_api_key is not None:

@@ -2,7 +2,7 @@
 
 ARGS ?=
 
-.PHONY: help install dev dev-down test test-int test-all lint format run run-lite \
+.PHONY: help install dev dev-down dev-trace test test-int test-all lint format run run-lite run-trace \
         docker-build docker-run docker-run-lite clean clean-docker
 
 help: ## Show this help message
@@ -19,15 +19,29 @@ dev: ## Start postgres + redis, wait for health checks
 	@until docker compose exec -T redis redis-cli ping > /dev/null 2>&1; do sleep 1; done
 	@echo "Infrastructure ready (postgres:5432, redis:6379)"
 
+dev-trace: ## Start postgres + redis + Jaeger for trace visualization
+	docker compose --profile trace up -d
+	@echo "Waiting for postgres..."
+	@until docker compose exec -T postgres pg_isready -U postgres -d jobhunter > /dev/null 2>&1; do sleep 1; done
+	@echo "Waiting for redis..."
+	@until docker compose exec -T redis redis-cli ping > /dev/null 2>&1; do sleep 1; done
+	@echo "Infrastructure + Jaeger ready (UI: http://localhost:16686)"
+
 dev-down: ## Stop infrastructure services
 	docker compose down
 
 test: ## Run unit tests
 	uv run pytest -m unit
 
-test-int: ## Start infra and run integration tests
+test-int: ## Start infra and run integration tests (dry-run)
 	$(MAKE) dev
 	uv run pytest -m integration
+
+test-e2e: ## Run e2e tests (requires API keys in .env)
+	uv run pytest -m "e2e or live" -v
+
+test-live: ## Run live tests (real APIs, requires .env)
+	uv run pytest -m live -v
 
 test-all: ## Run all tests
 	uv run pytest
@@ -40,6 +54,9 @@ format: ## Auto-format code
 
 run: ## Run CLI (pass args via ARGS="...")
 	uv run job-hunter run $(ARGS)
+
+run-trace: ## Run CLI with OTLP tracing enabled (requires make dev-trace)
+	uv run job-hunter run --trace $(ARGS)
 
 run-lite: ## Run CLI in lite mode (SQLite, no Docker)
 	JH_DB_BACKEND=sqlite JH_CACHE_BACKEND=db uv run job-hunter run --lite $(ARGS)

@@ -46,6 +46,17 @@ services:
     profiles:
       - full
 
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+    ports:
+      - "4317:4317"
+      - "4318:4318"
+      - "16686:16686"
+    profiles:
+      - trace
+
 volumes:
   pgdata:
   redisdata:

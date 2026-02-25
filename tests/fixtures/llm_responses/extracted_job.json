@@ -1,0 +1,21 @@
+{
+  "_meta": {
+    "input_tokens": 800,
+    "output_tokens": 250,
+    "model": "claude-haiku-4-5-20251001"
+  },
+  "data": {
+    "title": "Senior Backend Engineer",
+    "jd_text": "We are looking for a Senior Backend Engineer to join our platform team. You will build and maintain scalable microservices using Python and FastAPI, design data pipelines, and work with PostgreSQL and Redis. Requirements: 4+ years Python experience, strong SQL skills, experience with cloud infrastructure (AWS preferred). Nice to have: ML/AI experience, TypeScript, React.",
+    "location": "San Francisco, CA",
+    "remote_type": "hybrid",
+    "salary_min": 180000,
+    "salary_max": 220000,
+    "currency": "USD",
+    "required_skills": ["Python", "SQL", "AWS", "FastAPI"],
+    "preferred_skills": ["Machine Learning", "TypeScript", "React"],
+    "required_experience_years": 4.0,
+    "seniority_level": "senior",
+    "department": "Engineering"
+  }
+}

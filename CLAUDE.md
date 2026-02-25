@@ -24,10 +24,12 @@ make install                             # uv sync + playwright
 make test                                # unit tests
 make lint                                # ruff + mypy
 make run ARGS='resume.pdf --prefs "..."' # run with postgres + redis
+make run-trace ARGS='resume.pdf --prefs "..."' # run with OTLP tracing (Jaeger)
 make run-lite ARGS='resume.pdf --prefs "..." --dry-run'  # SQLite, no Docker
 
 # Docker
 make dev                                 # start postgres + redis
+make dev-trace                           # start postgres + redis + Jaeger
 make dev-down                            # stop infra
 make docker-build                        # build image
 make docker-run ARGS='--prefs "..."'     # run in full Docker (resume in data/)
@@ -58,7 +60,7 @@ make docker-run-lite ARGS='--prefs "..."' # run lite in Docker
 - **Cache**: redis (default), DB-backed (fallback for --lite)
 - **Email**: SendGrid or SMTP via aiosmtplib
 - **CLI**: typer + rich
-- **Observability**: structlog, LangSmith (optional), tenacity
+- **Observability**: structlog, OpenTelemetry (Jaeger), LangSmith (optional), tenacity
 
 ## Conventions
 - Python 3.12+, strict mypy, Ruff linting
@@ -75,7 +77,7 @@ make docker-run-lite ARGS='--prefs "..."' # run lite in Docker
 - Test files mirror source: `agents/scorer.py` -> `tests/unit/agents/test_scorer.py`
 
 ## Known Issues / TODOs
-- Phases 0-9 complete (core, infra, tools, agents, pipeline, CLI, observability, testing, Docker, open source standards)
+- Phases 0-10 complete (core, infra, tools, agents, pipeline, CLI, observability, testing, Docker, open source standards, integration & E2E testing)
 - Temporal orchestration deferred to Phase 2 (post-MVP)
 - Web UI deferred to future
 
@@ -89,16 +91,23 @@ This is a monorepo. Internal dependency order:
 ## Testing
 ```bash
 uv run pytest -m unit          # fast, fully mocked
-uv run pytest -m integration   # requires real DB (SQLite for speed)
-uv run pytest -m live          # requires network, skipped in CI
+uv run pytest -m integration   # requires Postgres + Redis (make dev)
+uv run pytest -m live          # requires real API keys in .env
 uv run pytest                  # all tests
+make test-int                  # start infra + run integration tests
+make test-e2e                  # run e2e + live tests
+make test-live                 # run live tests only
 ```
-- LLM calls mocked with fixture JSON responses
-- HTTP calls mocked with fixture HTML/JSON
-- SQLite used for integration tests (no Docker needed)
+- Unit tests: LLM calls mocked with MagicMock, HTTP mocked in-process
+- Integration tests: dry-run patches mock LLM/search/scraping, real DB + cache via Docker
+- Live E2E tests: real APIs, company_limit=1, cost guardrail < $2.00
+- Fixtures: `tests/fixtures/` has sample PDF, LLM response JSONs, ATS responses, HTML
+- Fakes: `tests/mocks/mock_tools.py` (named tool fakes), `tests/mocks/mock_llm.py` (LLM dispatcher)
 - Coverage target: 80%
 
 ## Recent Changes
+- Phase 10b: OTEL tracing wiring — pipeline produces root span + per-agent child spans with cost/error attributes, `get_tracer()` / `configure_tracing_with_exporter()` / `disable_tracing()` helpers, `--trace` CLI flag for OTLP, Jaeger in docker-compose (trace profile), `make dev-trace` / `make run-trace`, InMemorySpanExporter integration tests, 4 new unit tests for tracing helpers
+- Phase 10: Integration & E2E testing — fixture data (sample_resume.pdf, LLM/ATS/search/HTML fixtures), named fake tools (mock_tools.py), FakeLLMDispatcher (mock_llm.py), dry-run module (dryrun.py), CLI --dry-run mocks all externals, integration tests (DB repos, Redis cache, pipeline dry-run, checkpoint persistence, CLI dry-run), live E2E tests with cost guardrails, Makefile targets (test-e2e, test-live), e2e pytest marker
 - Phase 9: Open source standards — README.md, GitHub Actions CI (lint/test/docker jobs), .pre-commit-config.yaml (ruff + pre-commit-hooks), CONTRIBUTING.md (setup, workflow, architecture rules, ATS/agent checklists), SECURITY.md, issue templates (bug report, ATS support request), CHANGELOG.md updated
 - Phase 8: Docker + local dev — multi-stage Dockerfile (python:3.12-slim, uv, Playwright Chromium), docker-compose with postgres (pgvector:pg16) + redis (7-alpine) + app service (profiles: full), self-documenting Makefile (help, dev, dev-down, docker-build, docker-run, docker-run-lite, format, clean-docker), .dockerignore, uv.lock now tracked, .env.example Docker section
 - Phase 7: Testing — shared test factories (mock_settings, mock_factories), 53 new tests covering PipelineState serialization, checkpoint I/O, BaseAgent (_call_llm, _track_cost, _record_error), Pipeline orchestration, CLI entrypoint; 217 total tests passing, zero ruff warnings

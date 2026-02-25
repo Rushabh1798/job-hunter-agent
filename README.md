@@ -11,6 +11,8 @@ An autonomous multi-agent system that discovers relevant job openings for you. G
 - **Full mode** — PostgreSQL with pgvector for vector search, Redis for caching
 - **Crash recovery** — JSON checkpoint files after each pipeline step; resume interrupted runs with `--resume-from`
 - **Cost guardrails** — configurable per-run spend limit with automatic stop
+- **Dry-run mode** — mocks all external services (LLM, search, scraping, email) for safe testing with `--dry-run`
+- **OpenTelemetry tracing** — per-agent spans with cost/token attributes; visualize in Jaeger with `--trace`
 
 ## Requirements
 
@@ -47,6 +49,16 @@ make dev                # start postgres + redis
 make run ARGS='resume.pdf --prefs "Senior backend engineer, Python, remote US, 150k+"'
 ```
 
+### Run with Tracing
+
+Visualize the full pipeline execution in Jaeger:
+
+```bash
+make dev-trace          # start postgres + redis + Jaeger
+make run-trace ARGS='resume.pdf --prefs "Senior backend engineer, Python, remote US, 150k+"'
+# Open http://localhost:16686 to see traces in Jaeger UI
+```
+
 ### Run (Docker)
 
 ```bash
@@ -79,6 +91,8 @@ Key environment variables (see [`.env.example`](.env.example) for the full list)
 | `JH_DB_BACKEND` | No | `sqlite` (default) or `postgres` |
 | `JH_MAX_COST_PER_RUN_USD` | No | Per-run cost limit (default: $5.00) |
 | `JH_EMAIL_PROVIDER` | No | `smtp` or `sendgrid` (for email notifications) |
+| `JH_OTEL_EXPORTER` | No | `none` (default), `console`, or `otlp` |
+| `JH_OTEL_ENDPOINT` | No | OTLP endpoint (default: `http://localhost:4317`) |
 
 ## CLI Reference
 
@@ -91,7 +105,8 @@ Arguments:
 Options:
   --prefs TEXT        Freeform job preferences text
   --prefs-file PATH   File containing preferences text
-  --dry-run           Skip email, generate files only
+  --dry-run           Mock all external services, generate files only
+  --trace             Enable OTLP tracing (send spans to Jaeger)
   --lite              SQLite + local embeddings, no Docker
   --company-limit N   Cap number of companies to search
   --force-rescrape    Ignore scrape cache
@@ -110,9 +125,10 @@ src/
 
 tests/
 ├── unit/                  # Fast, fully mocked (pytest -m unit)
-├── integration/           # Real DB, mocked HTTP (pytest -m integration)
-├── e2e/                   # Full pipeline (pytest -m e2e)
-└── fixtures/              # Sample PDFs, HTML, JSON responses
+├── integration/           # Real DB + cache, mocked externals (pytest -m integration)
+├── e2e/                   # Full pipeline with real APIs (pytest -m live)
+├── fixtures/              # Sample PDFs, LLM responses, ATS responses, HTML
+└── mocks/                 # Named fake implementations (tools, LLM, settings)
 ```
 
 ## Development
@@ -121,8 +137,11 @@ tests/
 make install       # install deps + Playwright
 make lint          # ruff check + mypy
 make test          # unit tests
+make test-int      # start infra + run integration tests
+make test-e2e      # run e2e + live tests
 make format        # auto-format with ruff
 make dev           # start Postgres + Redis
+make dev-trace     # start Postgres + Redis + Jaeger
 make dev-down      # stop infrastructure
 ```
 

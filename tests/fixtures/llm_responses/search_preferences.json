@@ -1,0 +1,23 @@
+{
+  "_meta": {
+    "input_tokens": 120,
+    "output_tokens": 150,
+    "model": "claude-haiku-4-5-20251001"
+  },
+  "data": {
+    "preferred_locations": ["San Francisco, CA", "Remote"],
+    "remote_preference": "remote",
+    "target_titles": ["Senior Software Engineer", "Staff Engineer", "Backend Engineer"],
+    "target_seniority": ["senior", "staff"],
+    "excluded_titles": [],
+    "org_types": ["startup", "growth"],
+    "company_sizes": ["51-200", "201-500"],
+    "preferred_industries": ["Technology", "AI/ML", "SaaS"],
+    "excluded_companies": [],
+    "preferred_companies": [],
+    "min_salary": 150000,
+    "max_salary": 250000,
+    "currency": "USD",
+    "raw_text": ""
+  }
+}

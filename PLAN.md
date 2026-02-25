@@ -140,11 +140,12 @@ job-hunter-agent/
 │   │   │   ├── __init__.py
 │   │   │   ├── pipeline.py            # Pipeline class with checkpoint/resume
 │   │   │   └── checkpoint.py          # Checkpoint serialization/deserialization
-│   │   └── observability/             # TODO: Phase 6
+│   │   ├── dryrun.py                  # activate_dry_run_patches() for --dry-run and tests
+│   │   └── observability/
 │   │       ├── __init__.py
-│   │       ├── logging.py             # structlog configuration (TODO)
-│   │       ├── tracing.py             # LangSmith tracing (TODO)
-│   │       └── cost_tracker.py        # Per-run cost accumulator + guardrail (TODO)
+│   │       ├── logging.py             # structlog configuration (JSON/console)
+│   │       ├── tracing.py             # OTEL tracing (configure, get_tracer, Jaeger support)
+│   │       └── cost_tracker.py        # Per-run cost accumulator + guardrail
 │   │
 │   └── job_hunter_cli/                # CLI — depends on all packages
 │       ├── __init__.py
@@ -181,17 +182,27 @@ job-hunter-agent/
 │   │       ├── test_similarity.py     # Vector similarity tests
 │   │       └── test_repositories.py   # Repository tests (SQLite)
 │   ├── integration/
-│   │   ├── conftest.py               # Integration fixtures (real SQLite/Postgres)
-│   │   ├── test_pipeline.py           # Full pipeline integration test
-│   │   └── test_db_lifecycle.py       # DB CRUD lifecycle tests
+│   │   ├── conftest.py               # Integration fixtures (Postgres + Redis health checks)
+│   │   ├── test_db_repositories.py    # DB CRUD + constraint tests
+│   │   ├── test_cache_redis.py        # Redis cache round-trip, TTL, concurrent ops
+│   │   ├── test_pipeline_dryrun.py    # Full pipeline with dry-run patches
+│   │   ├── test_pipeline_tracing.py   # OTEL tracing with InMemorySpanExporter
+│   │   ├── test_checkpoint_persistence.py  # Checkpoint save/load/roundtrip
+│   │   └── test_cli_dryrun.py         # CLI invocation via CliRunner
 │   ├── e2e/
-│   │   └── test_full_pipeline.py      # End-to-end pipeline test (--dry-run)
+│   │   └── test_full_pipeline_live.py # Live API test (pytest -m live)
+│   ├── mocks/
+│   │   ├── mock_tools.py             # Named fake tool implementations
+│   │   ├── mock_llm.py               # FakeInstructorClient → fixture JSON
+│   │   ├── mock_settings.py          # make_settings() factory
+│   │   └── mock_factories.py         # make_pipeline_state() etc.
 │   └── fixtures/
 │       ├── sample_resume.pdf          # Test resume PDF
-│       ├── sample_greenhouse.json     # Greenhouse API response
-│       ├── sample_lever.json          # Lever API response
-│       ├── sample_career_page.html    # Career page HTML
-│       └── sample_jd.html            # Job description HTML
+│       ├── resume_text.txt            # Pre-extracted resume text
+│       ├── llm_responses/             # CandidateProfile, SearchPreferences, etc.
+│       ├── ats_responses/             # Greenhouse, Lever, Ashby JSON
+│       ├── search_results/            # Tavily-format search results
+│       └── html/                      # Sample career page HTML
 │
 └── output/                            # Runtime output (gitignored)
 ```
@@ -551,6 +562,7 @@ State (TypedDict):
 | 8 | Phase 7 | Testing + self-improvement (80% coverage) | DONE |
 | 9 | Phase 8 | Docker + local dev | DONE |
 | 10 | Phase 9 | GitHub open source standards (README, CI) | DONE |
+| 11 | Phase 10 | Integration & E2E testing | DONE |
 
 ---
 

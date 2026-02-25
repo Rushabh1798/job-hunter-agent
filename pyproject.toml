@@ -131,6 +131,7 @@ markers = [
     "unit: fast, fully mocked tests",
     "integration: requires real DB",
     "live: requires real network access",
+    "e2e: full end-to-end pipeline test",
     "slow: takes > 5 seconds",
 ]
 

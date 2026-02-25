@@ -90,6 +90,12 @@ def _enter_pipeline_patches(
             return_value=checkpoint_return,
         )
     )
+    mocks["get_tracer"] = stack.enter_context(
+        patch(
+            "job_hunter_agents.orchestrator.pipeline.get_tracer",
+            return_value=None,
+        )
+    )
     return mocks
 
 

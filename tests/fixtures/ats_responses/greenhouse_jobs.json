@@ -1,0 +1,30 @@
+{
+  "jobs": [
+    {
+      "id": 100001,
+      "title": "Senior Backend Engineer",
+      "content": "We are looking for a Senior Backend Engineer to join our platform team. You will build and maintain scalable microservices using Python and FastAPI, design data pipelines, and work with PostgreSQL and Redis. Requirements: 4+ years Python experience, strong SQL skills, experience with cloud infrastructure (AWS preferred). Nice to have: ML/AI experience, TypeScript, React.",
+      "absolute_url": "https://boards.greenhouse.io/acmecorp/jobs/100001",
+      "location": {
+        "name": "San Francisco, CA"
+      },
+      "updated_at": "2026-02-20T12:00:00Z",
+      "departments": [
+        {"name": "Engineering"}
+      ]
+    },
+    {
+      "id": 100002,
+      "title": "Platform Engineer",
+      "content": "Build and maintain our cloud infrastructure platform. Work with Kubernetes, Terraform, and AWS to support engineering teams. Requirements: 3+ years experience with cloud platforms, Python or Go, Docker and Kubernetes.",
+      "absolute_url": "https://boards.greenhouse.io/acmecorp/jobs/100002",
+      "location": {
+        "name": "Remote"
+      },
+      "updated_at": "2026-02-18T10:00:00Z",
+      "departments": [
+        {"name": "Infrastructure"}
+      ]
+    }
+  ]
+}

@@ -1,0 +1,16 @@
+[
+  {
+    "id": "lever-200001",
+    "text": "Data Engineer",
+    "description": "Join our data team to build real-time data pipelines using Apache Spark and Kafka. Python-based ETL frameworks, SQL optimization, and data modeling experience required.",
+    "descriptionPlain": "Join our data team to build real-time data pipelines using Apache Spark and Kafka. Python-based ETL frameworks, SQL optimization, and data modeling experience required.",
+    "categories": {
+      "location": "San Francisco, CA",
+      "team": "Data Engineering",
+      "commitment": "Full-time"
+    },
+    "applyUrl": "https://jobs.lever.co/dataflow/200001/apply",
+    "hostedUrl": "https://jobs.lever.co/dataflow/200001",
+    "createdAt": 1708300800000
+  }
+]

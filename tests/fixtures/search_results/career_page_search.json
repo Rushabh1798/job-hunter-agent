@@ -1,0 +1,16 @@
+{
+  "results": [
+    {
+      "title": "Careers at Acme Corp",
+      "url": "https://boards.greenhouse.io/acmecorp",
+      "content": "Join Acme Corp and help build the future of AI-powered developer tools. We are hiring engineers across all levels.",
+      "score": 0.95
+    },
+    {
+      "title": "Acme Corp - About Us",
+      "url": "https://acmecorp.com/about",
+      "content": "Acme Corp is a leading AI/ML company based in San Francisco.",
+      "score": 0.72
+    }
+  ]
+}

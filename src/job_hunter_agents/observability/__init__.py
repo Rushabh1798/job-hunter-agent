@@ -12,6 +12,9 @@ from job_hunter_agents.observability.logging import (
 )
 from job_hunter_agents.observability.tracing import (
     configure_tracing,
+    configure_tracing_with_exporter,
+    disable_tracing,
+    get_tracer,
     trace_pipeline_run,
     traced_agent,
 )
@@ -23,7 +26,10 @@ __all__ = [
     "clear_run_context",
     "configure_logging",
     "configure_tracing",
+    "configure_tracing_with_exporter",
+    "disable_tracing",
     "extract_token_usage",
+    "get_tracer",
     "trace_pipeline_run",
     "traced_agent",
 ]

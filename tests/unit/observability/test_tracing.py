@@ -12,6 +12,9 @@ from job_hunter_agents.observability import tracing
 from job_hunter_agents.observability.tracing import (
     _maybe_init_langsmith,
     configure_tracing,
+    configure_tracing_with_exporter,
+    disable_tracing,
+    get_tracer,
     trace_pipeline_run,
     traced_agent,
 )
@@ -138,3 +141,52 @@ class TestLangSmith:
             _maybe_init_langsmith(settings)  # type: ignore[arg-type]
             # Should not have changed
             assert os.environ.get("LANGCHAIN_TRACING_V2") == original
+
+
+@pytest.mark.unit
+class TestTracingHelpers:
+    """Tests for get_tracer, configure_tracing_with_exporter, disable_tracing."""
+
+    def test_get_tracer_returns_none_when_disabled(self) -> None:
+        """get_tracer() is None when tracing is off."""
+        original = tracing._tracer
+        tracing._tracer = None
+        assert get_tracer() is None
+        tracing._tracer = original
+
+    def test_get_tracer_returns_tracer_when_configured(self) -> None:
+        """get_tracer() returns a tracer after configure_tracing_with_exporter."""
+        pytest.importorskip("opentelemetry")
+        from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
+
+        configure_tracing_with_exporter("test-svc", InMemorySpanExporter())
+        assert get_tracer() is not None
+        disable_tracing()
+
+    def test_disable_tracing_resets(self) -> None:
+        """disable_tracing() sets tracer to None."""
+        pytest.importorskip("opentelemetry")
+        from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
+
+        configure_tracing_with_exporter("test-svc", InMemorySpanExporter())
+        assert get_tracer() is not None
+        disable_tracing()
+        assert get_tracer() is None
+
+    def test_configure_with_exporter_creates_spans(self) -> None:
+        """Spans are captured by InMemorySpanExporter."""
+        pytest.importorskip("opentelemetry")
+        from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
+
+        exporter = InMemorySpanExporter()
+        configure_tracing_with_exporter("test-svc", exporter)
+
+        tracer = get_tracer()
+        assert tracer is not None
+        with tracer.start_as_current_span("test-span") as span:
+            span.set_attribute("key", "value")
+
+        spans = exporter.get_finished_spans()
+        assert len(spans) == 1
+        assert spans[0].name == "test-span"
+        disable_tracing()

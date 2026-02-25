@@ -74,6 +74,7 @@ jobs:
         env:
           JH_ANTHROPIC_API_KEY: fake-key
           JH_TAVILY_API_KEY: fake-key
+          PYTHONPATH: .
         run: >
           uv run job-hunter run tests/fixtures/sample_resume.pdf
           --prefs "Python backend remote roles at AI startups"

@@ -16,7 +16,7 @@ import pytest
 from job_hunter_agents.orchestrator.pipeline import Pipeline
 from job_hunter_core.models.run import RunConfig
 
-pytestmark = pytest.mark.integration
+pytestmark = [pytest.mark.integration, pytest.mark.asyncio(loop_scope="session")]
 
 FIXTURE_RESUME = Path(__file__).parent.parent / "fixtures" / "sample_resume.pdf"
 

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import socket
+import time
 from collections.abc import AsyncGenerator, Generator
 from contextlib import ExitStack
 
@@ -19,17 +20,20 @@ from sqlalchemy.ext.asyncio import (
 from job_hunter_infra.db.models import Base
 
 # ---------------------------------------------------------------------------
-# Service health checks
+# Service health checks (with retry for CI container start-up)
 # ---------------------------------------------------------------------------
 
 
-def _tcp_reachable(host: str, port: int, timeout: float = 1.0) -> bool:
-    """Check if a TCP service is reachable."""
-    try:
-        with socket.create_connection((host, port), timeout=timeout):
-            return True
-    except OSError:
-        return False
+def _tcp_reachable(host: str, port: int, timeout: float = 1.0, retries: int = 5) -> bool:
+    """Check if a TCP service is reachable, retrying on failure."""
+    for attempt in range(retries):
+        try:
+            with socket.create_connection((host, port), timeout=timeout):
+                return True
+        except OSError:
+            if attempt < retries - 1:
+                time.sleep(0.5)
+    return False
 
 
 _pg_up = _tcp_reachable("localhost", 5432)
@@ -127,6 +131,27 @@ async def redis_client() -> AsyncGenerator[object, None]:
     yield client
     await client.flushdb()
     await client.aclose()  # type: ignore[attr-defined]
+
+
+# ---------------------------------------------------------------------------
+# Logging cleanup
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture(autouse=True)
+def _reset_logging() -> Generator[None, None, None]:
+    """Save and restore root logger handlers to prevent I/O-on-closed-file errors.
+
+    CLI tests call configure_logging() which replaces root logger handlers.
+    Without cleanup, stale StreamHandlers write to pytest-captured streams
+    that are already closed during teardown.
+    """
+    root = logging.getLogger()
+    original_handlers = root.handlers[:]
+    original_level = root.level
+    yield
+    root.handlers = original_handlers
+    root.level = original_level
 
 
 # ---------------------------------------------------------------------------

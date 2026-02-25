@@ -9,7 +9,7 @@ import pytest
 from job_hunter_infra.cache.redis_cache import RedisCacheClient
 from tests.integration.conftest import skip_no_redis
 
-pytestmark = [pytest.mark.integration, skip_no_redis]
+pytestmark = [pytest.mark.integration, skip_no_redis, pytest.mark.asyncio(loop_scope="session")]
 
 
 class TestRedisCacheClient:
@@ -46,7 +46,7 @@ class TestRedisCacheClient:
         await cache.set("expiring:key", "temporary", ttl_seconds=1)
         assert await cache.get("expiring:key") == "temporary"
 
-        await asyncio.sleep(1.5)
+        await asyncio.sleep(2.5)
         assert await cache.get("expiring:key") is None
 
     async def test_delete_and_exists(self, redis_client: object) -> None:

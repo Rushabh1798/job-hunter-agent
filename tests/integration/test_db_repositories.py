@@ -15,7 +15,7 @@ from job_hunter_infra.db.models import (
 )
 from tests.integration.conftest import skip_no_postgres
 
-pytestmark = [pytest.mark.integration, skip_no_postgres]
+pytestmark = [pytest.mark.integration, skip_no_postgres, pytest.mark.asyncio(loop_scope="session")]
 
 
 class TestProfileRepository:

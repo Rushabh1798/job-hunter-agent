@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import asyncio
+import logging
 import socket
 from collections.abc import AsyncGenerator, Generator
 from contextlib import ExitStack
@@ -51,16 +51,10 @@ skip_no_redis = pytest.mark.skipif(
 
 TEST_DB_URL = "postgresql+asyncpg://postgres:dev@localhost:5432/jobhunter_test"
 
-
-@pytest.fixture(scope="session")
-def event_loop() -> Generator[asyncio.AbstractEventLoop, None, None]:
-    """Create a single event loop for all session-scoped fixtures."""
-    loop = asyncio.new_event_loop()
-    yield loop
-    loop.close()
+_logger = logging.getLogger(__name__)
 
 
-@pytest_asyncio.fixture(scope="session")
+@pytest_asyncio.fixture(scope="session", loop_scope="session")
 async def db_engine() -> AsyncGenerator[AsyncEngine, None]:
     """Create test database and tables, drop on teardown."""
     if not _pg_up:
@@ -88,9 +82,12 @@ async def db_engine() -> AsyncGenerator[AsyncEngine, None]:
 
     yield engine
 
-    # Teardown: drop all tables
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.drop_all)
+    # Teardown: drop all tables (best-effort — CI containers are ephemeral)
+    try:
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.drop_all)
+    except Exception:
+        _logger.debug("db_engine teardown: table drop failed (expected in CI)")
     await engine.dispose()
 
 

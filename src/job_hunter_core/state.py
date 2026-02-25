@@ -125,7 +125,9 @@ class PipelineState:
         if self.scored_jobs:
             steps.append("score_jobs")
         if self.run_result is not None:
-            steps.extend(["aggregate", "notify"])
+            steps.append("aggregate")
+        if self.run_result is not None and self.run_result.email_sent:
+            steps.append("notify")
         return steps
 
     def build_result(

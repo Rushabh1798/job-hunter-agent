@@ -10,6 +10,7 @@ An autonomous multi-agent system that discovers relevant job openings for you. G
 - **Lite mode** — runs with SQLite and local embeddings, zero Docker dependencies (`--lite`)
 - **Full mode** — PostgreSQL with pgvector for vector search, Redis for caching
 - **Crash recovery** — JSON checkpoint files after each pipeline step; resume interrupted runs with `--resume-from`
+- **Temporal workflow mode** — durable workflow execution with per-company parallel scraping, automatic retry, and task queue routing (`--temporal`); falls back to checkpoints if Temporal is unavailable
 - **Cost guardrails** — configurable per-run spend limit with automatic stop
 - **Dry-run mode** — mocks all external services (LLM, search, scraping, email) for safe testing with `--dry-run`
 - **OpenTelemetry tracing** — per-agent spans with cost/token attributes; visualize in Jaeger with `--trace`
@@ -59,6 +60,19 @@ make run-trace ARGS='resume.pdf --prefs "Senior backend engineer, Python, remote
 # Open http://localhost:16686 to see traces in Jaeger UI
 ```
 
+### Run with Temporal (Durable Workflows)
+
+For durable workflow execution with per-company parallel scraping:
+
+```bash
+make dev-temporal          # start postgres + redis + Temporal + UI
+make worker QUEUE=default  # start a worker (in a separate terminal)
+make run-temporal ARGS='resume.pdf --prefs "Senior backend engineer, Python, remote US, 150k+"'
+# Open http://localhost:8233 to see workflow execution in Temporal UI
+```
+
+If Temporal is unavailable, the pipeline automatically falls back to checkpoint-based execution.
+
 ### Run (Docker)
 
 ```bash
@@ -93,6 +107,9 @@ Key environment variables (see [`.env.example`](.env.example) for the full list)
 | `JH_EMAIL_PROVIDER` | No | `smtp` or `sendgrid` (for email notifications) |
 | `JH_OTEL_EXPORTER` | No | `none` (default), `console`, or `otlp` |
 | `JH_OTEL_ENDPOINT` | No | OTLP endpoint (default: `http://localhost:4317`) |
+| `JH_ORCHESTRATOR` | No | `checkpoint` (default) or `temporal` |
+| `JH_TEMPORAL_ADDRESS` | No | Temporal server gRPC address (default: `localhost:7233`) |
+| `JH_TEMPORAL_API_KEY` | No | API key for Temporal Cloud auth |
 
 ## CLI Reference
 
@@ -106,11 +123,18 @@ Options:
   --prefs TEXT        Freeform job preferences text
   --prefs-file PATH   File containing preferences text
   --dry-run           Mock all external services, generate files only
+  --temporal          Use Temporal orchestrator (requires Temporal server)
   --trace             Enable OTLP tracing (send spans to Jaeger)
   --lite              SQLite + local embeddings, no Docker
   --company-limit N   Cap number of companies to search
   --force-rescrape    Ignore scrape cache
   --resume-from ID    Resume from a previous run's checkpoint
+  -v, --verbose       Enable debug logging
+
+job-hunter worker [OPTIONS]
+
+Options:
+  --queue TEXT        Task queue: default, llm, or scraping (default: default)
   -v, --verbose       Enable debug logging
 ```
 
@@ -142,7 +166,9 @@ make test-e2e      # run e2e + live tests
 make format        # auto-format with ruff
 make dev           # start Postgres + Redis
 make dev-trace     # start Postgres + Redis + Jaeger
+make dev-temporal  # start Postgres + Redis + Temporal + UI
 make dev-down      # stop infrastructure
+make worker        # start Temporal worker (default queue)
 ```
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for branch naming, commit conventions, architecture rules, and checklists for adding ATS clients or agents.

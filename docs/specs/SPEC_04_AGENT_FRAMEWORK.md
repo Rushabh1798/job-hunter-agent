@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Defines the agent execution framework: the `BaseAgent` abstract class with LLM integration, cost tracking, and error recording; the `Pipeline` sequential orchestrator with checkpoint-based crash recovery; the `checkpoint` module for serializing/deserializing pipeline state to JSON files; and the `dryrun` module that replaces all external I/O with named fakes for testing and `--dry-run` CLI mode.
+Defines the agent execution framework: the `BaseAgent` abstract class with LLM integration, cost tracking, and error recording; the `Pipeline` sequential orchestrator with checkpoint-based crash recovery; the `checkpoint` module for serializing/deserializing pipeline state to JSON files; the `dryrun` module that replaces all external I/O with named fakes for testing and `--dry-run` CLI mode; and the **Temporal orchestration layer** for durable workflow execution with per-company parallel scraping, automatic fallback to checkpoints, and flexible authentication (plain TCP, mTLS, API key).
 
 ## Key Files
 
@@ -12,6 +12,13 @@ Defines the agent execution framework: the `BaseAgent` abstract class with LLM i
 | `src/job_hunter_agents/orchestrator/pipeline.py` | `Pipeline`, `PIPELINE_STEPS` | 202 |
 | `src/job_hunter_agents/orchestrator/checkpoint.py` | `save_checkpoint()`, `load_latest_checkpoint()` | 61 |
 | `src/job_hunter_agents/dryrun.py` | `activate_dry_run_patches()` | 132 |
+| `src/job_hunter_agents/orchestrator/temporal_client.py` | `create_temporal_client()`, `check_temporal_available()` | 87 |
+| `src/job_hunter_agents/orchestrator/temporal_payloads.py` | `WorkflowInput`, `WorkflowOutput`, `StepInput`, `StepResult`, `ScrapeCompanyInput`, `ScrapeCompanyResult` | 77 |
+| `src/job_hunter_agents/orchestrator/temporal_workflow.py` | `JobHuntWorkflow` | 255 |
+| `src/job_hunter_agents/orchestrator/temporal_activities.py` | 8 activity functions, `ALL_ACTIVITIES` | 151 |
+| `src/job_hunter_agents/orchestrator/temporal_registry.py` | `AGENT_MAP` (lazy agent class loader) | 37 |
+| `src/job_hunter_agents/orchestrator/temporal_orchestrator.py` | `TemporalOrchestrator` | 119 |
+| `src/job_hunter_agents/orchestrator/temporal_worker.py` | `run_worker()` | 57 |
 
 ## Public API
 
@@ -383,6 +390,395 @@ Each fixture file has a `_meta` object (with `input_tokens` and `output_tokens`)
 
 ---
 
+## Temporal Orchestration
+
+The Temporal layer provides durable workflow execution as an alternative to the checkpoint-based `Pipeline`. It wraps the same 8 agents (no code changes to agents) and adds per-company parallel scraping, automatic retry policies, and task queue routing. If Temporal is unreachable, `TemporalOrchestrator` falls back to the checkpoint `Pipeline` transparently.
+
+### Architecture Overview
+
+```
+CLI --temporal flag
+   |
+   v
+TemporalOrchestrator.run(config)
+   |
+   +--> create_temporal_client(settings)  [may raise TemporalConnectionError]
+   |       |
+   |       +--> [connect fails] --> _fallback(config) --> Pipeline(settings).run(config)
+   |
+   +--> _build_input(config) --> WorkflowInput
+   |
+   +--> client.execute_workflow(JobHuntWorkflow.run, input, ...)
+   |       |
+   |       +--> Temporal Server executes JobHuntWorkflow
+   |               |
+   |               +--> parse_resume_activity (default queue)
+   |               +--> parse_prefs_activity (default queue)
+   |               +--> find_companies_activity (LLM queue)
+   |               +--> scrape_company_activity x N (scraping queue, PARALLEL)
+   |               +--> process_jobs_activity (LLM queue)
+   |               +--> score_jobs_activity (LLM queue)
+   |               +--> aggregate_activity (default queue)
+   |               +--> notify_activity (default queue)
+   |               |
+   |               +--> WorkflowOutput
+   |
+   +--> _to_run_result(output, run_id) --> RunResult
+```
+
+### Temporal Client (`orchestrator/temporal_client.py`)
+
+```python
+async def create_temporal_client(settings: Settings) -> Client
+async def check_temporal_available(settings: Settings) -> bool
+def _build_tls_config(settings: Settings) -> TLSConfig | bool
+def _build_rpc_metadata(settings: Settings) -> dict[str, str]
+```
+
+#### `create_temporal_client()` -- Auth Modes
+
+Supports three authentication modes based on settings:
+
+| Auth Mode | Settings Required | TLS Config | RPC Metadata |
+|-----------|-------------------|------------|--------------|
+| **Plain TCP** | `temporal_address` only | `False` | `{}` |
+| **mTLS** | `temporal_tls_cert_path` + `temporal_tls_key_path` | `TLSConfig(client_cert=..., client_private_key=...)` | `{}` |
+| **API Key** | `temporal_api_key` | `False` | `{"authorization": "Bearer <key>", "temporal-namespace": "<ns>"}` |
+
+On connection failure (any `Exception`), wraps and raises `TemporalConnectionError` with the original error message and address.
+
+#### `check_temporal_available()`
+
+Calls `create_temporal_client()` and returns `True` on success, `False` on `TemporalConnectionError`. Used for health checks and integration test skip logic.
+
+---
+
+### Temporal Payloads (`orchestrator/temporal_payloads.py`)
+
+All Pydantic `BaseModel` classes used as Temporal workflow/activity inputs and outputs. Temporal serializes these via its data converter (JSON by default).
+
+| Class | Direction | Purpose |
+|-------|-----------|---------|
+| `WorkflowInput` | CLI → Workflow | Run configuration + task queue names |
+| `WorkflowOutput` | Workflow → CLI | Final status, counts, costs, errors |
+| `StepInput` | Workflow → Activity | Serialized `PipelineState` snapshot |
+| `StepResult` | Activity → Workflow | Updated snapshot + token/cost delta |
+| `ScrapeCompanyInput` | Workflow → Activity | Single company data + run config |
+| `ScrapeCompanyResult` | Activity → Workflow | Raw jobs + errors from one company |
+
+#### `WorkflowInput` Fields
+
+```python
+class WorkflowInput(BaseModel):
+    run_id: str
+    resume_path: str
+    preferences_text: str
+    dry_run: bool = False
+    force_rescrape: bool = False
+    company_limit: int | None = None
+    lite_mode: bool = False
+    output_formats: list[str] = ["xlsx", "csv"]
+    default_queue: str = "job-hunter-default"
+    llm_queue: str = "job-hunter-llm"
+    scraping_queue: str = "job-hunter-scraping"
+```
+
+#### `StepInput` / `StepResult` — State Serialization
+
+Activities receive the full `PipelineState` as a JSON dict (`state_snapshot`) via the existing checkpoint serialization. Inside the activity, `_state_from_snapshot()` reconstructs a `PipelineState` via `PipelineState.from_checkpoint()`. After the agent runs, `_state_to_snapshot()` serializes back via `state.to_checkpoint(step_name)`. This reuses the existing checkpoint mechanism without any changes.
+
+`StepResult` also carries `tokens_used` and `cost_usd` as deltas (not totals), computed by subtracting pre-run values from post-run values.
+
+---
+
+### Temporal Workflow (`orchestrator/temporal_workflow.py`)
+
+```python
+@workflow.defn(name="JobHuntWorkflow")
+class JobHuntWorkflow:
+    @workflow.run
+    async def run(self, input: WorkflowInput) -> WorkflowOutput
+
+    async def _run_step(
+        self, activity_name, state_snapshot, task_queue, retry_policy, minutes
+    ) -> StepResult
+
+    async def _scrape_parallel(
+        self, state_snapshot, input
+    ) -> tuple[dict, int, float]
+
+    @staticmethod
+    def _build_initial_snapshot(input: WorkflowInput) -> dict
+    @staticmethod
+    def _extract(result: StepResult) -> tuple[dict, int, float]
+    @staticmethod
+    def _build_output(snapshot, total_tokens, total_cost, duration) -> WorkflowOutput
+```
+
+#### Workflow Execution Steps
+
+| Step | Activity Name | Task Queue | Retry Policy | Timeout |
+|------|--------------|------------|-------------|---------|
+| 1 | `parse_resume` | default | `_DEFAULT_RETRY` (3 attempts, 1-30s backoff) | 2 min |
+| 2 | `parse_prefs` | default | `_DEFAULT_RETRY` | 1 min |
+| 3 | `find_companies` | LLM | `_LLM_RETRY` (2 attempts, 2-60s backoff) | 5 min |
+| 4 | `scrape_company` × N | scraping | `_DEFAULT_RETRY` | 3 min per company |
+| 5 | `process_jobs` | LLM | `_DEFAULT_RETRY` | 5 min |
+| 6 | `score_jobs` | LLM | `_LLM_RETRY` | 5 min |
+| 7 | `aggregate` | default | `_DEFAULT_RETRY` | 2 min |
+| 8 | `notify` | default | `_DEFAULT_RETRY` | 1 min |
+
+#### Retry Policies
+
+```python
+_DEFAULT_RETRY = RetryPolicy(
+    maximum_attempts=3, backoff_coefficient=2.0,
+    initial_interval=timedelta(seconds=1), maximum_interval=timedelta(seconds=30),
+)
+_LLM_RETRY = RetryPolicy(
+    maximum_attempts=2, backoff_coefficient=2.0,
+    initial_interval=timedelta(seconds=2), maximum_interval=timedelta(seconds=60),
+)
+```
+
+#### `_scrape_parallel()` -- Per-Company Fan-Out
+
+Step 4 (scraping) executes per-company activities in parallel using `asyncio.gather()`:
+
+1. Extracts `companies` list and `config` dict from the state snapshot.
+2. Creates one `workflow.execute_activity(SCRAPE_COMPANY, ScrapeCompanyInput(...))` task per company.
+3. Awaits all tasks via `asyncio.gather(*tasks)`.
+4. Merges all `raw_jobs` and `errors` back into the state snapshot.
+5. Returns the updated snapshot, total tokens, and total cost.
+
+This is the key concurrency optimization — instead of sequential scraping per the checkpoint pipeline, Temporal dispatches N company scrapes simultaneously to the scraping worker pool.
+
+#### `_build_initial_snapshot()`
+
+Converts `WorkflowInput` to the same dict structure as `PipelineState`, with all agent-produced fields set to `None` or empty lists. This snapshot format is identical to what the checkpoint system produces, so activities can reconstruct `PipelineState` from it.
+
+#### Sandbox Imports
+
+Temporal's workflow sandbox restricts imports. Payload classes are imported inside `with workflow.unsafe.imports_passed_through():` at module level to bypass the sandbox for serialization types.
+
+---
+
+### Temporal Activities (`orchestrator/temporal_activities.py`)
+
+Each activity wraps a single agent's `.run()` method. Activities are stateless — they reconstruct state from the snapshot, run the agent, and return the updated snapshot.
+
+```python
+# Helper functions (not activities)
+def _get_settings() -> Settings
+def _state_from_snapshot(snapshot: dict) -> PipelineState
+def _state_to_snapshot(state: PipelineState, step_name: str) -> dict
+async def _run_agent_step(step_name: str, agent_cls_name: str, payload: StepInput) -> StepResult
+
+# Activity definitions
+@activity.defn(name="parse_resume")
+async def parse_resume_activity(payload: StepInput) -> StepResult
+
+@activity.defn(name="parse_prefs")
+async def parse_prefs_activity(payload: StepInput) -> StepResult
+
+@activity.defn(name="find_companies")
+async def find_companies_activity(payload: StepInput) -> StepResult
+
+@activity.defn(name="process_jobs")
+async def process_jobs_activity(payload: StepInput) -> StepResult
+
+@activity.defn(name="score_jobs")
+async def score_jobs_activity(payload: StepInput) -> StepResult
+
+@activity.defn(name="aggregate")
+async def aggregate_activity(payload: StepInput) -> StepResult
+
+@activity.defn(name="notify")
+async def notify_activity(payload: StepInput) -> StepResult
+
+@activity.defn(name="scrape_company")
+async def scrape_company_activity(payload: ScrapeCompanyInput) -> ScrapeCompanyResult
+
+ALL_ACTIVITIES = [...]  # All 8 activity functions for worker registration
+```
+
+#### `_run_agent_step()` -- Common Activity Logic
+
+1. **Load settings.** `_get_settings()` creates a `Settings()` instance from the worker's environment (cached per process).
+2. **Reconstruct state.** `_state_from_snapshot(payload.state_snapshot)` builds a `PipelineCheckpoint` from the snapshot dict and calls `PipelineState.from_checkpoint()`.
+3. **Record baseline.** Captures `tokens_before = state.total_tokens` and `cost_before = state.total_cost_usd`.
+4. **Resolve agent class.** Looks up the agent class by name from `AGENT_MAP` (lazy import registry).
+5. **Instantiate and run.** `agent = agent_cls(settings); state = await agent.run(state)`.
+6. **Serialize state.** `_state_to_snapshot(state, step_name)` calls `state.to_checkpoint(step_name)` and extracts the `state_snapshot` dict.
+7. **Compute deltas.** Returns `StepResult` with `tokens_used = state.total_tokens - tokens_before` and `cost_usd = state.total_cost_usd - cost_before`.
+
+#### `scrape_company_activity()` -- Per-Company Activity
+
+Unlike the generic step activities, this activity creates a minimal `PipelineState` with a single company, runs `JobsScraperAgent`, and returns the raw jobs and errors from that single company. It does **not** use the generic `_run_agent_step()` helper because it needs custom state construction (single company, not full state).
+
+---
+
+### Agent Registry (`orchestrator/temporal_registry.py`)
+
+```python
+AGENT_MAP = _LazyAgentMap()  # Singleton lazy-loading agent class registry
+```
+
+The `_LazyAgentMap` class avoids importing all 8 agent modules at Temporal worker startup (which would pull in heavy dependencies like sentence-transformers, Playwright, etc.). Instead, agent classes are imported on first access via `importlib.import_module()`.
+
+| Registry Key | Module Path | Class |
+|-------------|-------------|-------|
+| `ResumeParserAgent` | `job_hunter_agents.agents.resume_parser` | `ResumeParserAgent` |
+| `PrefsParserAgent` | `job_hunter_agents.agents.prefs_parser` | `PrefsParserAgent` |
+| `CompanyFinderAgent` | `job_hunter_agents.agents.company_finder` | `CompanyFinderAgent` |
+| `JobsScraperAgent` | `job_hunter_agents.agents.jobs_scraper` | `JobsScraperAgent` |
+| `JobProcessorAgent` | `job_hunter_agents.agents.job_processor` | `JobProcessorAgent` |
+| `JobsScorerAgent` | `job_hunter_agents.agents.jobs_scorer` | `JobsScorerAgent` |
+| `AggregatorAgent` | `job_hunter_agents.agents.aggregator` | `AggregatorAgent` |
+| `NotifierAgent` | `job_hunter_agents.agents.notifier` | `NotifierAgent` |
+
+---
+
+### Temporal Orchestrator (`orchestrator/temporal_orchestrator.py`)
+
+```python
+class TemporalOrchestrator:
+    def __init__(self, settings: Settings) -> None
+    async def run(self, config: RunConfig) -> RunResult
+    async def _fallback(self, config: RunConfig) -> RunResult
+    def _build_input(self, config: RunConfig) -> WorkflowInput
+    @staticmethod
+    def _to_run_result(output: WorkflowOutput, run_id: str) -> RunResult
+```
+
+#### `run()` -- Execution Flow
+
+1. **Connect to Temporal.** Calls `create_temporal_client(settings)`. If this raises `TemporalConnectionError`, logs a warning and calls `_fallback(config)`.
+2. **Build input.** Calls `_build_input(config)` to convert `RunConfig` + `Settings` into `WorkflowInput`, including task queue names from settings.
+3. **Execute workflow.** Calls `client.execute_workflow(JobHuntWorkflow.run, workflow_input, id=config.run_id, task_queue=..., execution_timeout=...)`. This blocks until the workflow completes.
+4. **Convert result.** Calls `_to_run_result(output, config.run_id)` to convert `WorkflowOutput` to `RunResult`.
+
+#### `_fallback()` -- Automatic Checkpoint Fallback
+
+Lazy-imports `Pipeline` (to avoid circular imports) and delegates to `Pipeline(settings).run(config)`. This means the exact same agent execution path as the default orchestrator is used as a fallback.
+
+#### `_build_input()` -- RunConfig → WorkflowInput
+
+Maps `RunConfig` fields to `WorkflowInput` fields and adds task queue names from settings:
+
+| WorkflowInput Field | Source |
+|---------------------|--------|
+| `run_id` | `config.run_id` |
+| `resume_path` | `str(config.resume_path)` |
+| `preferences_text` | `config.preferences_text` |
+| `dry_run` | `config.dry_run` |
+| `force_rescrape` | `config.force_rescrape` |
+| `company_limit` | `config.company_limit` |
+| `lite_mode` | `config.lite_mode` |
+| `output_formats` | `config.output_formats` |
+| `default_queue` | `settings.temporal_task_queue` |
+| `llm_queue` | `settings.temporal_llm_task_queue` |
+| `scraping_queue` | `settings.temporal_scraping_task_queue` |
+
+#### `_to_run_result()` -- WorkflowOutput → RunResult
+
+Converts `WorkflowOutput` fields to `RunResult`. Output file strings are converted to `Path` objects. Error dicts are reconstructed into `AgentError` model instances.
+
+---
+
+### Temporal Worker (`orchestrator/temporal_worker.py`)
+
+```python
+async def run_worker(settings: Settings, queue_name: str = "default") -> None
+QUEUE_SETTINGS_MAP = {"default": "temporal_task_queue", "llm": "temporal_llm_task_queue", "scraping": "temporal_scraping_task_queue"}
+```
+
+#### `run_worker()` -- Worker Lifecycle
+
+1. **Connect.** Creates a Temporal client via `create_temporal_client(settings)`.
+2. **Resolve queue.** Maps short name (`"default"`, `"llm"`, `"scraping"`) to the settings attribute containing the actual queue name. Raises `ValueError` for unknown queue names.
+3. **Create Worker.** Instantiates `temporalio.worker.Worker` with:
+   - The connected client
+   - The resolved task queue name
+   - `workflows=[JobHuntWorkflow]`
+   - `activities=ALL_ACTIVITIES` (all 8 activity functions)
+4. **Start polling.** Calls `await worker.run()` which polls indefinitely until cancelled.
+
+#### Task Queue Design
+
+Three task queues allow different worker resource profiles:
+
+| Queue | Short Name | Default Value | Workload | Resource Profile |
+|-------|-----------|---------------|----------|-----------------|
+| Default | `default` | `job-hunter-default` | Resume parsing, prefs, aggregation, notification | Low memory, low CPU |
+| LLM | `llm` | `job-hunter-llm` | Company finding, job processing, scoring | High memory (model loading), moderate CPU |
+| Scraping | `scraping` | `job-hunter-scraping` | Career page scraping (Playwright/crawl4ai) | High memory (Chromium), high I/O |
+
+Workers can be deployed with different instance sizes per queue. All queues can also be served by a single "default" worker for development.
+
+---
+
+### Temporal Configuration
+
+All Temporal settings are in `Settings` (pydantic-settings, env prefix `JH_`):
+
+| Setting | Type | Default | Purpose |
+|---------|------|---------|---------|
+| `orchestrator` | `Literal["checkpoint", "temporal"]` | `"checkpoint"` | Orchestrator selection |
+| `temporal_address` | `str` | `"localhost:7233"` | Temporal server gRPC address |
+| `temporal_namespace` | `str` | `"default"` | Temporal namespace |
+| `temporal_task_queue` | `str` | `"job-hunter-default"` | Default task queue name |
+| `temporal_llm_task_queue` | `str` | `"job-hunter-llm"` | LLM-heavy task queue name |
+| `temporal_scraping_task_queue` | `str` | `"job-hunter-scraping"` | Scraping task queue name |
+| `temporal_tls_cert_path` | `str \| None` | `None` | mTLS client cert file path |
+| `temporal_tls_key_path` | `str \| None` | `None` | mTLS client key file path |
+| `temporal_api_key` | `SecretStr \| None` | `None` | API key for Temporal Cloud |
+| `temporal_workflow_timeout_seconds` | `int` | `1800` | Overall workflow execution timeout |
+
+A Pydantic `model_validator` (`validate_temporal_config`) ensures that if `orchestrator == "temporal"`, the required `temporal_address` is set, and that mTLS cert/key are provided as a pair (not one without the other).
+
+---
+
+### Temporal Error Handling
+
+| Error | Source | Behavior |
+|-------|--------|----------|
+| `TemporalConnectionError` | `create_temporal_client()` | Caught by `TemporalOrchestrator.run()` → falls back to checkpoint Pipeline |
+| Activity timeout | `workflow.execute_activity()` | Temporal retries per retry policy; after max attempts, workflow fails |
+| Agent exception inside activity | `agent.run(state)` | Propagates to Temporal as activity failure → retried per policy |
+| `CostLimitExceededError` | `BaseAgent._track_cost()` inside activity | Activity fails, workflow fails (no special handling at workflow level) |
+
+---
+
+### Temporal Testing
+
+#### Unit Tests
+
+| Test File | Tests | Scope |
+|-----------|-------|-------|
+| `tests/unit/orchestrator/test_temporal_client.py` | 6 tests: plain TCP, mTLS, API key, connection failure, available true/false | Client factory |
+| `tests/unit/orchestrator/test_temporal_orchestrator.py` | 4 tests: success via Temporal, fallback on connection error, build_input mapping, to_run_result conversion | Orchestrator |
+| `tests/unit/orchestrator/test_temporal_activities.py` | 3 tests: parse_resume delegation, find_companies delegation, token delta tracking | Activities |
+| `tests/unit/orchestrator/test_temporal_workflow.py` | 5 tests: build_initial_snapshot (2), build_output (2), extract helper (1) | Workflow helpers |
+
+#### Integration Tests
+
+| Test File | Tests | Scope |
+|-----------|-------|-------|
+| `tests/integration/test_temporal_pipeline.py` | 2 tests: client connection, fallback when unavailable | Requires running Temporal (`make dev-temporal`) |
+
+#### How Temporal Unit Tests Mock
+
+**Activities tests** use a `_MockAgent` class that adds 100 tokens and 0.01 cost to state. The `_get_settings()` function is patched to return a `MagicMock`, and `AGENT_MAP` (from `temporal_registry`) is patched with a dict mapping the agent name to `_MockAgent`.
+
+**Important patching note:** `AGENT_MAP` must be patched at `job_hunter_agents.orchestrator.temporal_registry.AGENT_MAP`, not at `temporal_activities.AGENT_MAP`, because activities import from `temporal_registry` inside the function body (lazy import).
+
+**Client tests** patch `Client.connect` at `job_hunter_agents.orchestrator.temporal_client.Client.connect`.
+
+**Orchestrator tests** patch `create_temporal_client` at the orchestrator module and `Pipeline` at `job_hunter_agents.orchestrator.pipeline.Pipeline` (because `_fallback()` lazy-imports Pipeline inside the method body).
+
+---
+
 ## Internal Dependencies
 
 ### From SPEC_01 (Core Models)
@@ -398,6 +794,7 @@ Each fixture file has a `_meta` object (with `input_tokens` and `output_tokens`)
 | `CostLimitExceededError` | `BaseAgent._track_cost()`, `Pipeline._run_agent_step()` | Cost guardrail exception |
 | `FatalAgentError` | `Pipeline._run_agent_step()` | Unrecoverable agent error |
 | `CheckpointError` | `save_checkpoint()`, `load_latest_checkpoint()` | Checkpoint I/O failure |
+| `TemporalConnectionError` | `create_temporal_client()`, `TemporalOrchestrator.run()` | Temporal connection failure |
 | `TOKEN_PRICES` | `BaseAgent._track_cost()` | Per-model token pricing map |
 
 ### From Observability (SPEC_10)
@@ -418,7 +815,8 @@ Each fixture file has a `_meta` object (with `input_tokens` and `output_tokens`)
 | `instructor` | `BaseAgent.__init__()`, `BaseAgent._call_llm()` | Structured output parsing; wraps Anthropic client to validate responses against Pydantic models |
 | `tenacity` | `BaseAgent._call_llm()` | Retry decorator with exponential backoff |
 | `structlog` | All modules | Structured logging |
-| `pydantic` | `BaseAgent._call_llm()` type bound | `BaseModel` as type bound for response models |
+| `pydantic` | `BaseAgent._call_llm()` type bound, payload models | `BaseModel` as type bound for response models and Temporal payloads |
+| `temporalio` | Temporal client, workflow, activities, worker | Temporal SDK for durable workflow execution |
 
 ## Data Flow
 
@@ -496,9 +894,10 @@ All framework-relevant exceptions inherit from `JobHunterError`:
 
 ```
 JobHunterError
-  +-- CostLimitExceededError   (raised by _track_cost)
-  +-- FatalAgentError          (raised by agents for unrecoverable errors)
-  +-- CheckpointError          (raised by save_checkpoint / load_latest_checkpoint)
+  +-- CostLimitExceededError       (raised by _track_cost)
+  +-- FatalAgentError              (raised by agents for unrecoverable errors)
+  +-- CheckpointError              (raised by save_checkpoint / load_latest_checkpoint)
+  +-- TemporalConnectionError      (raised by create_temporal_client)
 ```
 
 ### Error Handling Flow
@@ -532,9 +931,14 @@ The cost guardrail is checked **after every LLM call**, not after every agent st
 | `tests/unit/agents/test_base.py` | `TestCallLLM` (4 tests), `TestTrackCost` (5 tests), `TestRecordError` (1 test) | Unit |
 | `tests/unit/orchestrator/test_pipeline.py` | `TestPipeline` (9 tests) | Unit |
 | `tests/unit/orchestrator/test_checkpoint.py` | `TestSaveCheckpoint` (3 tests), `TestLoadLatestCheckpoint` (4 tests) | Unit |
+| `tests/unit/orchestrator/test_temporal_client.py` | 6 tests: plain TCP, mTLS, API key, connection failure, available true/false | Unit |
+| `tests/unit/orchestrator/test_temporal_orchestrator.py` | 4 tests: success, fallback, build_input, to_run_result | Unit |
+| `tests/unit/orchestrator/test_temporal_activities.py` | 3 tests: parse_resume, find_companies, token delta | Unit |
+| `tests/unit/orchestrator/test_temporal_workflow.py` | 5 tests: snapshot build, output build, extract helper | Unit |
 | `tests/integration/test_pipeline_dryrun.py` | `TestPipelineDryRun` (6 tests) | Integration |
 | `tests/integration/test_pipeline_tracing.py` | Pipeline tracing integration tests | Integration |
 | `tests/integration/test_checkpoint_persistence.py` | Checkpoint persistence integration tests | Integration |
+| `tests/integration/test_temporal_pipeline.py` | 2 tests: client connection, fallback when unavailable | Integration (requires `make dev-temporal`) |
 
 ### How Pipeline Tests Mock Agents
 
@@ -627,9 +1031,34 @@ This activates all 14 patches from `activate_dry_run_patches()`, runs the full 8
 3. To handle it at the agent level (recorded but non-fatal), use `self._record_error(state, error, is_fatal=False)` inside the agent's `run()` method and continue execution.
 4. Add test coverage for the new error path in `tests/unit/orchestrator/test_pipeline.py` using the `_make_error_steps()` helper.
 
+### Add a new agent to the Temporal workflow
+
+1. Follow "Add a new agent to the pipeline" steps 1-9 above (checkpoint pipeline).
+2. Add the agent class to `_AGENT_PATHS` in `src/job_hunter_agents/orchestrator/temporal_registry.py`.
+3. Create a new activity function in `src/job_hunter_agents/orchestrator/temporal_activities.py`:
+   ```python
+   @activity.defn(name="new_step")
+   async def new_step_activity(payload: StepInput) -> StepResult:
+       return await _run_agent_step("new_step", "NewAgent", payload)
+   ```
+4. Add the new activity to `ALL_ACTIVITIES` in `temporal_activities.py`.
+5. Add the activity call in `JobHuntWorkflow.run()` in `temporal_workflow.py` at the appropriate position.
+6. Add unit tests in `tests/unit/orchestrator/test_temporal_activities.py`.
+
+### Change Temporal retry or timeout policy
+
+1. Edit `_DEFAULT_RETRY` or `_LLM_RETRY` in `src/job_hunter_agents/orchestrator/temporal_workflow.py`.
+2. Or change the `minutes` parameter in specific `_run_step()` calls within `JobHuntWorkflow.run()`.
+
+### Add a new Temporal auth method
+
+1. Add the relevant settings field(s) to `Settings` in `src/job_hunter_core/config/settings.py`.
+2. Update `_build_tls_config()` or `_build_rpc_metadata()` in `src/job_hunter_agents/orchestrator/temporal_client.py`.
+3. Add unit tests in `tests/unit/orchestrator/test_temporal_client.py`.
+
 ## Cross-References
 
-- **SPEC_01: Core Models** -- `PipelineState`, `RunConfig`, `RunResult`, `PipelineCheckpoint`, `AgentError`, `Settings`, all exception classes, `TOKEN_PRICES`
+- **SPEC_01: Core Models** -- `PipelineState`, `RunConfig`, `RunResult`, `PipelineCheckpoint`, `AgentError`, `Settings`, all exception classes (including `TemporalConnectionError`), `TOKEN_PRICES`
 - **SPEC_10: Observability** -- `extract_token_usage()`, `bind_run_context()`, `clear_run_context()`, `get_tracer()`, `trace_pipeline_run()`, `CostTracker`, `LLMCallMetrics`
-- **Individual Agent Specs** -- Each concrete agent (ResumeParserAgent through NotifierAgent) inherits from `BaseAgent` and is registered in `PIPELINE_STEPS`
-- **CLI Spec** -- The CLI entry point creates a `Pipeline` instance and calls `pipeline.run(config)`. In `--dry-run` mode, it activates `activate_dry_run_patches()` before execution.
+- **Individual Agent Specs** -- Each concrete agent (ResumeParserAgent through NotifierAgent) inherits from `BaseAgent` and is registered in both `PIPELINE_STEPS` and `temporal_registry.AGENT_MAP`
+- **CLI Spec (SPEC_11)** -- The CLI entry point creates a `Pipeline` or `TemporalOrchestrator` based on `--temporal` flag. The `worker` command starts a Temporal worker. In `--dry-run` mode, it activates `activate_dry_run_patches()` before execution.

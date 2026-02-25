@@ -69,9 +69,7 @@ def configure_tracing(settings: Settings) -> None:
 
 def traced_agent(
     agent_name: str,
-) -> Callable[
-    [Callable[P, Coroutine[Any, Any, R]]], Callable[P, Coroutine[Any, Any, R]]
-]:
+) -> Callable[[Callable[P, Coroutine[Any, Any, R]]], Callable[P, Coroutine[Any, Any, R]]]:
     """Async decorator that wraps an agent run in an OTEL span.
 
     Noop when tracing is disabled (_tracer is None).
@@ -124,8 +122,6 @@ def _maybe_init_langsmith(settings: Settings) -> None:
     """Set LangSmith env vars if an API key is configured."""
     if settings.langsmith_api_key is not None:
         os.environ["LANGCHAIN_TRACING_V2"] = "true"
-        os.environ["LANGCHAIN_API_KEY"] = (
-            settings.langsmith_api_key.get_secret_value()
-        )
+        os.environ["LANGCHAIN_API_KEY"] = settings.langsmith_api_key.get_secret_value()
         os.environ["LANGCHAIN_PROJECT"] = settings.langsmith_project
         logger.info("langsmith_configured", project=settings.langsmith_project)

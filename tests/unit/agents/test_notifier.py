@@ -90,9 +90,7 @@ class TestNotifierAgent:
         state = _make_state()
 
         with (
-            patch(
-                "job_hunter_agents.agents.notifier.EmailSender"
-            ) as mock_sender_cls,
+            patch("job_hunter_agents.agents.notifier.EmailSender") as mock_sender_cls,
             patch("job_hunter_agents.agents.base.AsyncAnthropic"),
             patch("job_hunter_agents.agents.base.instructor"),
         ):
@@ -113,16 +111,12 @@ class TestNotifierAgent:
         state = _make_state()
 
         with (
-            patch(
-                "job_hunter_agents.agents.notifier.EmailSender"
-            ) as mock_sender_cls,
+            patch("job_hunter_agents.agents.notifier.EmailSender") as mock_sender_cls,
             patch("job_hunter_agents.agents.base.AsyncAnthropic"),
             patch("job_hunter_agents.agents.base.instructor"),
         ):
             mock_sender = mock_sender_cls.return_value
-            mock_sender.send = AsyncMock(
-                side_effect=RuntimeError("SMTP error")
-            )
+            mock_sender.send = AsyncMock(side_effect=RuntimeError("SMTP error"))
 
             agent = NotifierAgent(settings)
             result = await agent.run(state)

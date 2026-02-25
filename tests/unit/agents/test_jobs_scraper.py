@@ -57,9 +57,7 @@ class TestJobsScraperAgent:
         state.companies = [_make_company()]
 
         with (
-            patch(
-                "job_hunter_agents.agents.jobs_scraper.WebScraper"
-            ) as mock_scraper_cls,
+            patch("job_hunter_agents.agents.jobs_scraper.WebScraper") as mock_scraper_cls,
             patch("job_hunter_agents.agents.base.AsyncAnthropic"),
             patch("job_hunter_agents.agents.base.instructor"),
         ):
@@ -85,16 +83,12 @@ class TestJobsScraperAgent:
         state.companies = [_make_company()]
 
         with (
-            patch(
-                "job_hunter_agents.agents.jobs_scraper.WebScraper"
-            ) as mock_scraper_cls,
+            patch("job_hunter_agents.agents.jobs_scraper.WebScraper") as mock_scraper_cls,
             patch("job_hunter_agents.agents.base.AsyncAnthropic"),
             patch("job_hunter_agents.agents.base.instructor"),
         ):
             mock_scraper = mock_scraper_cls.return_value
-            mock_scraper.fetch_page = AsyncMock(
-                side_effect=RuntimeError("Connection failed")
-            )
+            mock_scraper.fetch_page = AsyncMock(side_effect=RuntimeError("Connection failed"))
 
             agent = JobsScraperAgent(settings)
             result = await agent.run(state)
@@ -118,9 +112,7 @@ class TestJobsScraperAgent:
         ]
 
         with (
-            patch(
-                "job_hunter_agents.agents.jobs_scraper.WebScraper"
-            ) as mock_scraper_cls,
+            patch("job_hunter_agents.agents.jobs_scraper.WebScraper") as mock_scraper_cls,
             patch("job_hunter_agents.agents.base.AsyncAnthropic"),
             patch("job_hunter_agents.agents.base.instructor"),
         ):

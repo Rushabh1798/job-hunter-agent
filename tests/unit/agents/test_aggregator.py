@@ -79,9 +79,7 @@ class TestAggregatorAgent:
                 result = await agent.run(state)
 
             assert result.run_result is not None
-            assert any(
-                str(f).endswith(".csv") for f in result.run_result.output_files
-            )
+            assert any(str(f).endswith(".csv") for f in result.run_result.output_files)
 
     @pytest.mark.asyncio
     async def test_writes_xlsx(self) -> None:
@@ -105,9 +103,7 @@ class TestAggregatorAgent:
                 result = await agent.run(state)
 
             assert result.run_result is not None
-            assert any(
-                str(f).endswith(".xlsx") for f in result.run_result.output_files
-            )
+            assert any(str(f).endswith(".xlsx") for f in result.run_result.output_files)
 
     @pytest.mark.asyncio
     async def test_empty_scored_jobs(self) -> None:

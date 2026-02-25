@@ -19,6 +19,7 @@ from tests.mocks.mock_settings import make_settings
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 class _MockAgentA:
     """Mock agent that marks itself as having run."""
 
@@ -113,6 +114,7 @@ def _make_error_steps(exc: Exception) -> list:
 # Tests
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.unit
 class TestPipeline:
     """Test Pipeline.run orchestration."""
@@ -161,9 +163,7 @@ class TestPipeline:
 
         with ExitStack() as stack:
             _enter_pipeline_patches(stack, steps=tracking_steps)
-            stack.enter_context(
-                patch.object(Pipeline, "_load_or_create_state", return_value=state)
-            )
+            stack.enter_context(patch.object(Pipeline, "_load_or_create_state", return_value=state))
             await pipeline.run(state.config)
 
         assert "parse_resume" not in call_log

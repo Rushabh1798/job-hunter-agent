@@ -12,9 +12,7 @@ from job_hunter_core.models.company import Company
 
 logger = structlog.get_logger()
 
-GREENHOUSE_BOARD_PATTERN = re.compile(
-    r"boards\.greenhouse\.io/(\w+)", re.IGNORECASE
-)
+GREENHOUSE_BOARD_PATTERN = re.compile(r"boards\.greenhouse\.io/(\w+)", re.IGNORECASE)
 GREENHOUSE_API_URL = "https://boards-api.greenhouse.io/v1/boards/{slug}/jobs"
 
 

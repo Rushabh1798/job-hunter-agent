@@ -27,9 +27,7 @@ class RunConfig(BaseModel):
     output_formats: list[str] = Field(
         default_factory=lambda: ["xlsx", "csv"], description="Output file formats (csv, xlsx)"
     )
-    lite_mode: bool = Field(
-        default=False, description="SQLite + local embeddings, no Docker"
-    )
+    lite_mode: bool = Field(default=False, description="SQLite + local embeddings, no Docker")
 
 
 class AgentError(BaseModel):

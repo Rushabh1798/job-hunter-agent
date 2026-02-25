@@ -57,21 +57,15 @@ class TestResumeParserAgent:
         profile = _make_profile()
 
         with (
-            patch(
-                "job_hunter_agents.agents.resume_parser.PDFParser"
-            ) as mock_pdf_cls,
+            patch("job_hunter_agents.agents.resume_parser.PDFParser") as mock_pdf_cls,
             patch.object(
                 ResumeParserAgent,
                 "_call_llm",
                 new_callable=AsyncMock,
                 return_value=profile,
             ),
-            patch(
-                "job_hunter_agents.agents.base.AsyncAnthropic"
-            ),
-            patch(
-                "job_hunter_agents.agents.base.instructor"
-            ),
+            patch("job_hunter_agents.agents.base.AsyncAnthropic"),
+            patch("job_hunter_agents.agents.base.instructor"),
         ):
             mock_pdf = mock_pdf_cls.return_value
             mock_pdf.extract_text = AsyncMock(return_value="Resume text here")
@@ -90,9 +84,7 @@ class TestResumeParserAgent:
         profile = _make_profile()
 
         with (
-            patch(
-                "job_hunter_agents.agents.resume_parser.PDFParser"
-            ) as mock_pdf_cls,
+            patch("job_hunter_agents.agents.resume_parser.PDFParser") as mock_pdf_cls,
             patch.object(
                 ResumeParserAgent,
                 "_call_llm",

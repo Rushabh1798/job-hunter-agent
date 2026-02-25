@@ -28,9 +28,7 @@ class ProfileModel(Base):
 
     __tablename__ = "profiles"
 
-    id: Mapped[str] = mapped_column(
-        String(36), primary_key=True, default=lambda: str(uuid4())
-    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
     content_hash: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
     email: Mapped[str] = mapped_column(String(255), nullable=False)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
@@ -49,7 +47,9 @@ class ProfileModel(Base):
         DateTime, nullable=False, default=lambda: datetime.now(UTC)
     )
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime, nullable=False, default=lambda: datetime.now(UTC),
+        DateTime,
+        nullable=False,
+        default=lambda: datetime.now(UTC),
         onupdate=lambda: datetime.now(UTC),
     )
 
@@ -59,9 +59,7 @@ class CompanyModel(Base):
 
     __tablename__ = "companies"
 
-    id: Mapped[str] = mapped_column(
-        String(36), primary_key=True, default=lambda: str(uuid4())
-    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     domain: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
     ats_type: Mapped[str] = mapped_column(String(50), nullable=False, default="unknown")
@@ -78,7 +76,9 @@ class CompanyModel(Base):
         DateTime, nullable=False, default=lambda: datetime.now(UTC)
     )
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime, nullable=False, default=lambda: datetime.now(UTC),
+        DateTime,
+        nullable=False,
+        default=lambda: datetime.now(UTC),
         onupdate=lambda: datetime.now(UTC),
     )
 
@@ -88,12 +88,8 @@ class RawJobModel(Base):
 
     __tablename__ = "jobs_raw"
 
-    id: Mapped[str] = mapped_column(
-        String(36), primary_key=True, default=lambda: str(uuid4())
-    )
-    company_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("companies.id"), nullable=False
-    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(String(36), ForeignKey("companies.id"), nullable=False)
     source_url: Mapped[str] = mapped_column(String(2048), nullable=False)
     raw_html: Mapped[str | None] = mapped_column(Text, nullable=True)
     raw_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)  # type: ignore[type-arg]
@@ -112,15 +108,11 @@ class NormalizedJobModel(Base):
 
     __tablename__ = "jobs_normalized"
 
-    id: Mapped[str] = mapped_column(
-        String(36), primary_key=True, default=lambda: str(uuid4())
-    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
     raw_job_id: Mapped[str | None] = mapped_column(
         String(36), ForeignKey("jobs_raw.id"), nullable=True
     )
-    company_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("companies.id"), nullable=False
-    )
+    company_id: Mapped[str] = mapped_column(String(36), ForeignKey("companies.id"), nullable=False)
     company_name: Mapped[str] = mapped_column(String(255), nullable=False)
     title: Mapped[str] = mapped_column(String(500), nullable=False)
     jd_text: Mapped[str] = mapped_column(Text, nullable=False)
@@ -145,7 +137,9 @@ class NormalizedJobModel(Base):
         DateTime, nullable=False, default=lambda: datetime.now(UTC)
     )
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime, nullable=False, default=lambda: datetime.now(UTC),
+        DateTime,
+        nullable=False,
+        default=lambda: datetime.now(UTC),
         onupdate=lambda: datetime.now(UTC),
     )
 
@@ -155,9 +149,7 @@ class ScoredJobModel(Base):
 
     __tablename__ = "jobs_scored"
 
-    id: Mapped[str] = mapped_column(
-        String(36), primary_key=True, default=lambda: str(uuid4())
-    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
     normalized_job_id: Mapped[str] = mapped_column(
         String(36), ForeignKey("jobs_normalized.id"), nullable=False
     )
@@ -185,9 +177,7 @@ class RunHistoryModel(Base):
 
     __tablename__ = "run_history"
 
-    id: Mapped[str] = mapped_column(
-        String(36), primary_key=True, default=lambda: str(uuid4())
-    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
     run_id: Mapped[str] = mapped_column(String(100), unique=True, nullable=False, index=True)
     status: Mapped[str] = mapped_column(String(50), nullable=False)
     companies_attempted: Mapped[int] = mapped_column(Integer, default=0)

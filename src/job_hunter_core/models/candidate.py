@@ -50,10 +50,20 @@ class CandidateProfile(BaseModel):
     past_titles: list[str] = Field(default_factory=list, description="Previous job titles")
     industries: list[str] = Field(default_factory=list, description="Industries worked in")
     education: list[Education] = Field(default_factory=list, description="Education entries")
-    seniority_level: Literal[
-        "intern", "junior", "mid", "senior", "staff",
-        "principal", "director", "vp", "c-level",
-    ] | None = Field(default=None, description="Inferred seniority level")
+    seniority_level: (
+        Literal[
+            "intern",
+            "junior",
+            "mid",
+            "senior",
+            "staff",
+            "principal",
+            "director",
+            "vp",
+            "c-level",
+        ]
+        | None
+    ) = Field(default=None, description="Inferred seniority level")
     tech_stack: list[str] = Field(default_factory=list, description="Technologies used")
     raw_text: str = Field(description="Raw extracted text from resume")
     parsed_at: datetime = Field(
@@ -71,27 +81,19 @@ class SearchPreferences(BaseModel):
     remote_preference: Literal["onsite", "hybrid", "remote", "any"] = Field(
         default="any", description="Remote work preference"
     )
-    target_titles: list[str] = Field(
-        default_factory=list, description="Desired job titles"
-    )
-    target_seniority: list[str] = Field(
-        default_factory=list, description="Target seniority levels"
-    )
-    excluded_titles: list[str] = Field(
-        default_factory=list, description="Job titles to exclude"
-    )
+    target_titles: list[str] = Field(default_factory=list, description="Desired job titles")
+    target_seniority: list[str] = Field(default_factory=list, description="Target seniority levels")
+    excluded_titles: list[str] = Field(default_factory=list, description="Job titles to exclude")
     org_types: list[str] = Field(
         default_factory=lambda: ["any"], description="Preferred organization types"
     )
-    company_sizes: list[
-        Literal["1-10", "11-50", "51-200", "201-500", "501-1000", "1001+"]
-    ] = Field(default_factory=list, description="Preferred company sizes")
+    company_sizes: list[Literal["1-10", "11-50", "51-200", "201-500", "501-1000", "1001+"]] = Field(
+        default_factory=list, description="Preferred company sizes"
+    )
     preferred_industries: list[str] = Field(
         default_factory=list, description="Preferred industries"
     )
-    excluded_companies: list[str] = Field(
-        default_factory=list, description="Companies to exclude"
-    )
+    excluded_companies: list[str] = Field(default_factory=list, description="Companies to exclude")
     preferred_companies: list[str] = Field(
         default_factory=list, description="Specific companies to target"
     )

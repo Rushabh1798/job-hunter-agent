@@ -31,10 +31,7 @@ class JobsScraperAgent(BaseAgent):
         start = time.monotonic()
 
         semaphore = asyncio.Semaphore(self.settings.max_concurrent_scrapers)
-        tasks = [
-            self._scrape_company(company, semaphore, state)
-            for company in state.companies
-        ]
+        tasks = [self._scrape_company(company, semaphore, state) for company in state.companies]
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
         for result in results:
@@ -43,9 +40,12 @@ class JobsScraperAgent(BaseAgent):
             elif isinstance(result, Exception):
                 self._record_error(state, result)
 
-        self._log_end(time.monotonic() - start, {
-            "raw_jobs_count": len(state.raw_jobs),
-        })
+        self._log_end(
+            time.monotonic() - start,
+            {
+                "raw_jobs_count": len(state.raw_jobs),
+            },
+        )
         return state
 
     async def _scrape_company(
@@ -59,9 +59,7 @@ class JobsScraperAgent(BaseAgent):
             try:
                 return await self._do_scrape(company)
             except Exception as e:
-                self._record_error(
-                    state, e, company_name=company.name
-                )
+                self._record_error(state, e, company_name=company.name)
                 return []
 
     async def _do_scrape(self, company: Company) -> list[RawJob]:
@@ -86,9 +84,7 @@ class JobsScraperAgent(BaseAgent):
 
         client = clients.get(ats_type)
         if not client:
-            return await self._scrape_via_crawler(
-                company, str(company.career_page.url)
-            )
+            return await self._scrape_via_crawler(company, str(company.career_page.url))
 
         raw_dicts = await client.fetch_jobs(company)
         return [
@@ -103,9 +99,7 @@ class JobsScraperAgent(BaseAgent):
             for job_dict in raw_dicts
         ]
 
-    async def _scrape_via_crawler(
-        self, company: Company, career_url: str
-    ) -> list[RawJob]:
+    async def _scrape_via_crawler(self, company: Company, career_url: str) -> list[RawJob]:
         """Scrape via web crawler."""
         scraper = WebScraper()
         content = await scraper.fetch_page(career_url)

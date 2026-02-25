@@ -77,6 +77,9 @@ target-version = "py312"
 select = ["E", "F", "I", "N", "UP", "ANN", "ASYNC", "B", "C4", "DTZ", "PT", "RUF"]
 ignore = ["ANN101", "ANN102"]
 
+[tool.ruff.lint.per-file-ignores]
+"src/job_hunter_cli/main.py" = ["B008"]  # typer requires function calls in defaults
+
 [tool.ruff.lint.isort]
 known-first-party = ["job_hunter_core", "job_hunter_agents", "job_hunter_infra", "job_hunter_cli"]
 

@@ -103,8 +103,7 @@ class NotifierAgent(BaseAgent):
             for sj in top_jobs
         )
         top_text = "\n".join(
-            f"  {sj.rank}. [{sj.fit_report.score}] "
-            f"{sj.job.company_name} - {sj.job.title}"
+            f"  {sj.rank}. [{sj.fit_report.score}] {sj.job.company_name} - {sj.job.title}"
             for sj in top_jobs
         )
 

@@ -34,9 +34,7 @@ class ResumeParserAgent(BaseAgent):
 
         profile = await self._call_llm(
             messages=[
-                {"role": "user", "content": RESUME_PARSER_USER.format(
-                    resume_text=raw_text
-                )},
+                {"role": "user", "content": RESUME_PARSER_USER.format(resume_text=raw_text)},
             ],
             model=self.settings.haiku_model,
             response_model=CandidateProfile,
@@ -48,9 +46,12 @@ class ResumeParserAgent(BaseAgent):
         profile.content_hash = content_hash
 
         state.profile = profile
-        self._log_end(time.monotonic() - start, {
-            "name": profile.name,
-            "email": str(profile.email),
-            "skills_count": len(profile.skills),
-        })
+        self._log_end(
+            time.monotonic() - start,
+            {
+                "name": profile.name,
+                "email": str(profile.email),
+                "skills_count": len(profile.skills),
+            },
+        )
         return state

@@ -67,9 +67,7 @@ class TestRunCommand:
             with patch("job_hunter_cli.main.asyncio") as mock_asyncio:
                 mock_asyncio.run.return_value = mock_result
 
-                result = runner.invoke(
-                    app, ["run", str(resume), "--prefs", "Remote Python roles"]
-                )
+                result = runner.invoke(app, ["run", str(resume), "--prefs", "Remote Python roles"])
 
         assert result.exit_code == 0
         assert "success" in result.output
@@ -140,9 +138,7 @@ class TestRunCommand:
             mock_settings_cls.return_value = MagicMock()
             mock_asyncio.run.return_value = mock_result
 
-            result = runner.invoke(
-                app, ["run", str(resume), "--prefs", "test"]
-            )
+            result = runner.invoke(app, ["run", str(resume), "--prefs", "test"])
 
         assert result.exit_code == 1
 

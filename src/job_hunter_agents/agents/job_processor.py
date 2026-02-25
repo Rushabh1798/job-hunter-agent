@@ -55,14 +55,18 @@ class JobProcessorAgent(BaseAgent):
                     state.normalized_jobs.append(normalized)
             except Exception as e:
                 self._record_error(
-                    state, e,
+                    state,
+                    e,
                     company_name=raw_job.company_name,
                     job_id=str(raw_job.id),
                 )
 
-        self._log_end(time.monotonic() - start, {
-            "normalized_count": len(state.normalized_jobs),
-        })
+        self._log_end(
+            time.monotonic() - start,
+            {
+                "normalized_count": len(state.normalized_jobs),
+            },
+        )
         return state
 
     async def _process_job(self, raw_job: RawJob) -> NormalizedJob | None:
@@ -89,9 +93,7 @@ class JobProcessorAgent(BaseAgent):
         if isinstance(loc_data, dict):
             location = str(loc_data.get("name", ""))
 
-        apply_url = str(
-            data.get("absolute_url", data.get("applyUrl", str(raw_job.source_url)))
-        )
+        apply_url = str(data.get("absolute_url", data.get("applyUrl", str(raw_job.source_url))))
 
         content_hash = self._compute_hash(raw_job.company_name, title, jd_text)
 
@@ -118,19 +120,20 @@ class JobProcessorAgent(BaseAgent):
 
         extracted = await self._call_llm(
             messages=[
-                {"role": "user", "content": JOB_PROCESSOR_USER.format(
-                    company_name=raw_job.company_name,
-                    source_url=str(raw_job.source_url),
-                    raw_content=content[:8000],
-                )},
+                {
+                    "role": "user",
+                    "content": JOB_PROCESSOR_USER.format(
+                        company_name=raw_job.company_name,
+                        source_url=str(raw_job.source_url),
+                        raw_content=content[:8000],
+                    ),
+                },
             ],
             model=self.settings.haiku_model,
             response_model=ExtractedJob,
         )
 
-        content_hash = self._compute_hash(
-            raw_job.company_name, extracted.title, extracted.jd_text
-        )
+        content_hash = self._compute_hash(raw_job.company_name, extracted.title, extracted.jd_text)
 
         return NormalizedJob(
             raw_job_id=raw_job.id,
@@ -152,9 +155,7 @@ class JobProcessorAgent(BaseAgent):
             content_hash=content_hash,
         )
 
-    def _compute_hash(
-        self, company_name: str, title: str, jd_text: str
-    ) -> str:
+    def _compute_hash(self, company_name: str, title: str, jd_text: str) -> str:
         """Compute deduplication hash."""
         raw = f"{company_name}|{title}|{jd_text[:500]}"
         return hashlib.sha256(raw.encode()).hexdigest()

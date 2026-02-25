@@ -65,9 +65,7 @@ class CompanyFinderAgent(BaseAgent):
                 if company:
                     companies.append(company)
             except Exception as e:
-                self._record_error(
-                    state, e, company_name=candidate.name
-                )
+                self._record_error(state, e, company_name=candidate.name)
 
         if not companies:
             msg = "No companies found with valid career pages"
@@ -78,14 +76,15 @@ class CompanyFinderAgent(BaseAgent):
             companies = companies[: state.config.company_limit]
 
         state.companies = companies
-        self._log_end(time.monotonic() - start, {
-            "companies_found": len(companies),
-        })
+        self._log_end(
+            time.monotonic() - start,
+            {
+                "companies_found": len(companies),
+            },
+        )
         return state
 
-    async def _generate_candidates(
-        self, state: PipelineState
-    ) -> list[CompanyCandidate]:
+    async def _generate_candidates(self, state: PipelineState) -> list[CompanyCandidate]:
         """Generate company candidates via LLM or preferences."""
         profile = state.profile
         prefs = state.preferences
@@ -101,23 +100,26 @@ class CompanyFinderAgent(BaseAgent):
 
         result = await self._call_llm(
             messages=[
-                {"role": "user", "content": COMPANY_FINDER_USER.format(
-                    name=profile.name,
-                    current_title=profile.current_title or "Not specified",
-                    years_of_experience=profile.years_of_experience,
-                    skills=", ".join(s.name for s in profile.skills),
-                    industries=", ".join(profile.industries) or "Not specified",
-                    tech_stack=", ".join(profile.tech_stack) or "Not specified",
-                    target_titles=", ".join(prefs.target_titles) or "Any",
-                    target_seniority=", ".join(prefs.target_seniority) or "Any",
-                    preferred_locations=", ".join(prefs.preferred_locations) or "Any",
-                    remote_preference=prefs.remote_preference,
-                    preferred_industries=", ".join(prefs.preferred_industries) or "Any",
-                    org_types=", ".join(prefs.org_types),
-                    company_sizes=", ".join(prefs.company_sizes) or "Any",
-                    excluded_companies=", ".join(prefs.excluded_companies) or "None",
-                    preferred_companies=", ".join(prefs.preferred_companies) or "None",
-                )},
+                {
+                    "role": "user",
+                    "content": COMPANY_FINDER_USER.format(
+                        name=profile.name,
+                        current_title=profile.current_title or "Not specified",
+                        years_of_experience=profile.years_of_experience,
+                        skills=", ".join(s.name for s in profile.skills),
+                        industries=", ".join(profile.industries) or "Not specified",
+                        tech_stack=", ".join(profile.tech_stack) or "Not specified",
+                        target_titles=", ".join(prefs.target_titles) or "Any",
+                        target_seniority=", ".join(prefs.target_seniority) or "Any",
+                        preferred_locations=", ".join(prefs.preferred_locations) or "Any",
+                        remote_preference=prefs.remote_preference,
+                        preferred_industries=", ".join(prefs.preferred_industries) or "Any",
+                        org_types=", ".join(prefs.org_types),
+                        company_sizes=", ".join(prefs.company_sizes) or "Any",
+                        excluded_companies=", ".join(prefs.excluded_companies) or "None",
+                        preferred_companies=", ".join(prefs.preferred_companies) or "None",
+                    ),
+                },
             ],
             model=self.settings.sonnet_model,
             response_model=CompanyCandidateList,
@@ -125,15 +127,11 @@ class CompanyFinderAgent(BaseAgent):
         )
         return result.companies
 
-    async def _validate_and_build(
-        self, candidate: CompanyCandidate
-    ) -> Company | None:
+    async def _validate_and_build(self, candidate: CompanyCandidate) -> Company | None:
         """Validate career page exists and build Company model."""
         career_url = await self._find_career_url(candidate)
         if not career_url:
-            logger.warning(
-                "career_page_not_found", company=candidate.name
-            )
+            logger.warning("career_page_not_found", company=candidate.name)
             return None
 
         ats_type, strategy = await self._detect_ats(career_url)
@@ -151,13 +149,9 @@ class CompanyFinderAgent(BaseAgent):
             description=candidate.description,
         )
 
-    async def _find_career_url(
-        self, candidate: CompanyCandidate
-    ) -> str | None:
+    async def _find_career_url(self, candidate: CompanyCandidate) -> str | None:
         """Find the career page URL for a company."""
-        search_tool = WebSearchTool(
-            api_key=self.settings.tavily_api_key.get_secret_value()
-        )
+        search_tool = WebSearchTool(api_key=self.settings.tavily_api_key.get_secret_value())
         return await search_tool.find_career_page(candidate.name)
 
     async def _detect_ats(self, career_url: str) -> tuple[ATSType, str]:

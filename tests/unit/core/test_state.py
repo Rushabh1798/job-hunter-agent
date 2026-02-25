@@ -191,9 +191,7 @@ class TestCompletedSteps:
         ],
         ids=["profile->parse_resume", "preferences->parse_prefs"],
     )
-    def test_single_field_infers_step(
-        self, field: str, value: object, expected_step: str
-    ) -> None:
+    def test_single_field_infers_step(self, field: str, value: object, expected_step: str) -> None:
         """Setting a single field infers the corresponding completed step."""
         state = make_pipeline_state(**{field: value})
         assert expected_step in state.completed_steps

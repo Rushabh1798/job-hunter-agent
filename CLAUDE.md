@@ -75,8 +75,7 @@ make docker-run-lite ARGS='--prefs "..."' # run lite in Docker
 - Test files mirror source: `agents/scorer.py` -> `tests/unit/agents/test_scorer.py`
 
 ## Known Issues / TODOs
-- Phases 0-8 complete (core, infra, tools, agents, pipeline, CLI, observability, testing, Docker)
-- Phase 9: GitHub open source standards — TODO
+- Phases 0-9 complete (core, infra, tools, agents, pipeline, CLI, observability, testing, Docker, open source standards)
 - Temporal orchestration deferred to Phase 2 (post-MVP)
 - Web UI deferred to future
 
@@ -100,6 +99,7 @@ uv run pytest                  # all tests
 - Coverage target: 80%
 
 ## Recent Changes
+- Phase 9: Open source standards — README.md, GitHub Actions CI (lint/test/docker jobs), .pre-commit-config.yaml (ruff + pre-commit-hooks), CONTRIBUTING.md (setup, workflow, architecture rules, ATS/agent checklists), SECURITY.md, issue templates (bug report, ATS support request), CHANGELOG.md updated
 - Phase 8: Docker + local dev — multi-stage Dockerfile (python:3.12-slim, uv, Playwright Chromium), docker-compose with postgres (pgvector:pg16) + redis (7-alpine) + app service (profiles: full), self-documenting Makefile (help, dev, dev-down, docker-build, docker-run, docker-run-lite, format, clean-docker), .dockerignore, uv.lock now tracked, .env.example Docker section
 - Phase 7: Testing — shared test factories (mock_settings, mock_factories), 53 new tests covering PipelineState serialization, checkpoint I/O, BaseAgent (_call_llm, _track_cost, _record_error), Pipeline orchestration, CLI entrypoint; 217 total tests passing, zero ruff warnings
 - Phase 6: Observability — structlog config (JSON/console), OTEL tracing (none/console/otlp), LangSmith env setup, CostTracker + extract_token_usage, wired cost tracking into _call_llm, pipeline run context + tracing + cost summary, 27 new tests

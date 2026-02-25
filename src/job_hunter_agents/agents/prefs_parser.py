@@ -28,9 +28,12 @@ class PrefsParserAgent(BaseAgent):
 
         prefs = await self._call_llm(
             messages=[
-                {"role": "user", "content": PREFS_PARSER_USER.format(
-                    preferences_text=state.config.preferences_text
-                )},
+                {
+                    "role": "user",
+                    "content": PREFS_PARSER_USER.format(
+                        preferences_text=state.config.preferences_text
+                    ),
+                },
             ],
             model=self.settings.haiku_model,
             response_model=SearchPreferences,
@@ -40,8 +43,11 @@ class PrefsParserAgent(BaseAgent):
         prefs.raw_text = state.config.preferences_text
 
         state.preferences = prefs
-        self._log_end(time.monotonic() - start, {
-            "target_titles": prefs.target_titles,
-            "locations": prefs.preferred_locations,
-        })
+        self._log_end(
+            time.monotonic() - start,
+            {
+                "target_titles": prefs.target_titles,
+                "locations": prefs.preferred_locations,
+            },
+        )
         return state

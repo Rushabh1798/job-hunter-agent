@@ -31,9 +31,7 @@ class JobRepository:
 
     async def get_normalized_by_hash(self, content_hash: str) -> NormalizedJobModel | None:
         """Check if a normalized job with this content hash already exists."""
-        stmt = select(NormalizedJobModel).where(
-            NormalizedJobModel.content_hash == content_hash
-        )
+        stmt = select(NormalizedJobModel).where(NormalizedJobModel.content_hash == content_hash)
         result = await self._session.execute(stmt)
         return result.scalar_one_or_none()
 
@@ -44,9 +42,7 @@ class JobRepository:
             return existing
         return await self.create_normalized(model)
 
-    async def list_normalized(
-        self, limit: int = 100, offset: int = 0
-    ) -> list[NormalizedJobModel]:
+    async def list_normalized(self, limit: int = 100, offset: int = 0) -> list[NormalizedJobModel]:
         """List normalized jobs with pagination."""
         stmt = select(NormalizedJobModel).limit(limit).offset(offset)
         result = await self._session.execute(stmt)
@@ -54,9 +50,7 @@ class JobRepository:
 
     async def get_all_with_embeddings(self) -> list[tuple[NormalizedJobModel, list[float]]]:
         """Get all normalized jobs that have embeddings (for SQLite brute-force search)."""
-        stmt = select(NormalizedJobModel).where(
-            NormalizedJobModel.embedding_json.isnot(None)
-        )
+        stmt = select(NormalizedJobModel).where(NormalizedJobModel.embedding_json.isnot(None))
         result = await self._session.execute(stmt)
         jobs = result.scalars().all()
         pairs: list[tuple[NormalizedJobModel, list[float]]] = []

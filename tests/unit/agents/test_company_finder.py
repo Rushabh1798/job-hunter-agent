@@ -117,9 +117,7 @@ class TestCompanyFinderAgent:
             agent = CompanyFinderAgent(settings)
             from job_hunter_core.models.company import ATSType
 
-            ats_type, strategy = await agent._detect_ats(
-                "https://boards.greenhouse.io/stripe"
-            )
+            ats_type, strategy = await agent._detect_ats("https://boards.greenhouse.io/stripe")
             assert ats_type == ATSType.GREENHOUSE
             assert strategy == "api"
 
@@ -135,8 +133,6 @@ class TestCompanyFinderAgent:
             agent = CompanyFinderAgent(settings)
             from job_hunter_core.models.company import ATSType
 
-            ats_type, strategy = await agent._detect_ats(
-                "https://company.com/careers"
-            )
+            ats_type, strategy = await agent._detect_ats("https://company.com/careers")
             assert ats_type == ATSType.UNKNOWN
             assert strategy == "crawl4ai"

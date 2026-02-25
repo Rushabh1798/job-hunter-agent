@@ -21,9 +21,7 @@ class ScoreRepository:
         await self._session.flush()
         return model
 
-    async def list_by_run(
-        self, run_id: str, limit: int = 100
-    ) -> list[ScoredJobModel]:
+    async def list_by_run(self, run_id: str, limit: int = 100) -> list[ScoredJobModel]:
         """List scored jobs for a given run, ordered by score descending."""
         stmt = (
             select(ScoredJobModel)

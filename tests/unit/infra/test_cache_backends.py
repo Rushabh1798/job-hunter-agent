@@ -29,9 +29,7 @@ async def db_session() -> AsyncSession:
     engine = create_async_engine("sqlite+aiosqlite:///:memory:", echo=False)
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
-    factory = async_sessionmaker(
-        engine, class_=AsyncSession, expire_on_commit=False
-    )
+    factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
     async with factory() as session:
         yield session  # type: ignore[misc]
     await engine.dispose()
@@ -80,9 +78,7 @@ class TestDBCacheClient:
         assert await cache.exists("key1") is False
 
     @pytest.mark.asyncio
-    async def test_expired_entry_returns_none(
-        self, db_session: AsyncSession
-    ) -> None:
+    async def test_expired_entry_returns_none(self, db_session: AsyncSession) -> None:
         """Expired entries are treated as missing and cleaned up."""
         expired = CacheEntry(
             key="expired",
@@ -97,9 +93,7 @@ class TestDBCacheClient:
         assert await cache.exists("expired") is False
 
     @pytest.mark.asyncio
-    async def test_overwrite_existing_key(
-        self, db_session: AsyncSession
-    ) -> None:
+    async def test_overwrite_existing_key(self, db_session: AsyncSession) -> None:
         """Setting an existing key overwrites the value."""
         cache = DBCacheClient(db_session)
         await cache.set("k", "v1", ttl_seconds=60)
@@ -107,9 +101,7 @@ class TestDBCacheClient:
         assert await cache.get("k") == "v2"
 
     @pytest.mark.asyncio
-    async def test_delete_nonexistent_key(
-        self, db_session: AsyncSession
-    ) -> None:
+    async def test_delete_nonexistent_key(self, db_session: AsyncSession) -> None:
         """Deleting a missing key is a no-op."""
         cache = DBCacheClient(db_session)
         await cache.delete("nope")  # should not raise

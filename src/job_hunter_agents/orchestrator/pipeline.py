@@ -90,9 +90,7 @@ class Pipeline:
                         )
 
                     except FatalAgentError as e:
-                        logger.error(
-                            "fatal_agent_error", step=step_name, error=str(e)
-                        )
+                        logger.error("fatal_agent_error", step=step_name, error=str(e))
                         duration = time.monotonic() - start
                         self._log_cost_summary(state, duration)
                         return state.build_result(
@@ -142,9 +140,7 @@ class Pipeline:
     def _load_or_create_state(self, config: RunConfig) -> PipelineState:
         """Load from checkpoint if available, otherwise create fresh state."""
         if self.settings.checkpoint_enabled:
-            checkpoint = load_latest_checkpoint(
-                config.run_id, self.settings.checkpoint_dir
-            )
+            checkpoint = load_latest_checkpoint(config.run_id, self.settings.checkpoint_dir)
             if checkpoint:
                 logger.info(
                     "resuming_from_checkpoint",

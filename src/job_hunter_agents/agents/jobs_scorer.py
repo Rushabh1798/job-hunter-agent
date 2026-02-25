@@ -68,18 +68,18 @@ class JobsScorerAgent(BaseAgent):
 
         # Sort by score, filter by threshold, assign ranks
         scored.sort(key=lambda s: s.fit_report.score, reverse=True)
-        filtered = [
-            s for s in scored
-            if s.fit_report.score >= self.settings.min_score_threshold
-        ]
+        filtered = [s for s in scored if s.fit_report.score >= self.settings.min_score_threshold]
         for rank, sj in enumerate(filtered, start=1):
             sj.rank = rank
 
         state.scored_jobs = filtered
-        self._log_end(time.monotonic() - start, {
-            "scored_count": len(scored),
-            "above_threshold": len(filtered),
-        })
+        self._log_end(
+            time.monotonic() - start,
+            {
+                "scored_count": len(scored),
+                "above_threshold": len(filtered),
+            },
+        )
         return state
 
     async def _score_batch(
@@ -102,19 +102,22 @@ class JobsScorerAgent(BaseAgent):
 
         result = await self._call_llm(
             messages=[
-                {"role": "user", "content": JOB_SCORER_USER.format(
-                    name=profile.name,
-                    current_title=profile.current_title or "Not specified",
-                    years_of_experience=profile.years_of_experience,
-                    seniority_level=profile.seniority_level or "Not specified",
-                    skills=", ".join(s.name for s in profile.skills),
-                    industries=", ".join(profile.industries) or "Not specified",
-                    location=profile.location or "Not specified",
-                    remote_preference=prefs.remote_preference,
-                    org_types=", ".join(prefs.org_types),
-                    salary_range=salary_range,
-                    jobs_block=jobs_block,
-                )},
+                {
+                    "role": "user",
+                    "content": JOB_SCORER_USER.format(
+                        name=profile.name,
+                        current_title=profile.current_title or "Not specified",
+                        years_of_experience=profile.years_of_experience,
+                        seniority_level=profile.seniority_level or "Not specified",
+                        skills=", ".join(s.name for s in profile.skills),
+                        industries=", ".join(profile.industries) or "Not specified",
+                        location=profile.location or "Not specified",
+                        remote_preference=prefs.remote_preference,
+                        org_types=", ".join(prefs.org_types),
+                        salary_range=salary_range,
+                        jobs_block=jobs_block,
+                    ),
+                },
             ],
             model=self.settings.sonnet_model,
             response_model=BatchScoreResult,
@@ -126,9 +129,7 @@ class JobsScorerAgent(BaseAgent):
             idx = score_result.job_index
             if 0 <= idx < len(jobs):
                 rec = score_result.recommendation
-                if rec not in (
-                    "strong_match", "good_match", "stretch", "mismatch"
-                ):
+                if rec not in ("strong_match", "good_match", "stretch", "mismatch"):
                     rec = "stretch"
 
                 fit_report = FitReport(
@@ -142,9 +143,7 @@ class JobsScorerAgent(BaseAgent):
                     recommendation=rec,
                     confidence=score_result.confidence,
                 )
-                scored_jobs.append(ScoredJob(
-                    job=jobs[idx], fit_report=fit_report
-                ))
+                scored_jobs.append(ScoredJob(job=jobs[idx], fit_report=fit_report))
 
         return scored_jobs
 
@@ -157,7 +156,7 @@ class JobsScorerAgent(BaseAgent):
                 salary = f"${job.salary_min:,}-${job.salary_max:,}"
 
             blocks.append(
-                f"<job index=\"{i}\">\n"
+                f'<job index="{i}">\n'
                 f"Company: {job.company_name}\n"
                 f"Title: {job.title}\n"
                 f"Location: {job.location or 'Not specified'}\n"

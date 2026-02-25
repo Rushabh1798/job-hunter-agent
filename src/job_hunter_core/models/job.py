@@ -22,9 +22,7 @@ class RawJob(BaseModel):
         default_factory=lambda: datetime.now(UTC), description="When this job was scraped"
     )
     scrape_strategy: str = Field(description="Strategy used to scrape this job")
-    source_confidence: float = Field(
-        ge=0.0, le=1.0, description="Confidence in data quality"
-    )
+    source_confidence: float = Field(ge=0.0, le=1.0, description="Confidence in data quality")
 
 
 class NormalizedJob(BaseModel):
@@ -45,9 +43,7 @@ class NormalizedJob(BaseModel):
     salary_min: int | None = Field(default=None, description="Minimum salary")
     salary_max: int | None = Field(default=None, description="Maximum salary")
     currency: str | None = Field(default=None, description="Salary currency")
-    required_skills: list[str] = Field(
-        default_factory=list, description="Required skills from JD"
-    )
+    required_skills: list[str] = Field(default_factory=list, description="Required skills from JD")
     preferred_skills: list[str] = Field(
         default_factory=list, description="Preferred/nice-to-have skills"
     )
@@ -92,9 +88,7 @@ class FitReport(BaseModel):
     recommendation: Literal["strong_match", "good_match", "stretch", "mismatch"] = Field(
         description="Overall recommendation category"
     )
-    confidence: float = Field(
-        ge=0.0, le=1.0, description="Confidence in this assessment"
-    )
+    confidence: float = Field(ge=0.0, le=1.0, description="Confidence in this assessment")
 
 
 class ScoredJob(BaseModel):

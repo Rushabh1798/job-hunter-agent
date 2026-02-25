@@ -26,9 +26,7 @@ class TestEmailSender:
         with patch.object(
             sender, "_send_smtp", new_callable=AsyncMock, return_value=True
         ) as mock_smtp:
-            result = await sender.send(
-                "user@example.com", "Subject", "<p>hi</p>", "hi"
-            )
+            result = await sender.send("user@example.com", "Subject", "<p>hi</p>", "hi")
 
         assert result is True
         mock_smtp.assert_called_once()
@@ -40,9 +38,7 @@ class TestEmailSender:
         with patch.object(
             sender, "_send_sendgrid", new_callable=AsyncMock, return_value=True
         ) as mock_sg:
-            result = await sender.send(
-                "user@example.com", "Subject", "<p>hi</p>", "hi"
-            )
+            result = await sender.send("user@example.com", "Subject", "<p>hi</p>", "hi")
 
         assert result is True
         mock_sg.assert_called_once()
@@ -58,9 +54,7 @@ class TestEmailSender:
             side_effect=ConnectionError("refused"),
         ):
             with pytest.raises(EmailDeliveryError, match="refused"):
-                await sender.send(
-                    "user@example.com", "Subject", "<p>hi</p>", "hi"
-                )
+                await sender.send("user@example.com", "Subject", "<p>hi</p>", "hi")
 
     @pytest.mark.asyncio
     async def test_send_smtp_builds_message(self) -> None:
@@ -83,8 +77,6 @@ class TestEmailSender:
     def test_build_smtp_message_no_attachment(self) -> None:
         """_build_smtp_message creates message without attachment."""
         sender = EmailSender(smtp_user="sender@example.com")
-        msg = sender._build_smtp_message(
-            "to@example.com", "Subject", "<p>html</p>", "text"
-        )
+        msg = sender._build_smtp_message("to@example.com", "Subject", "<p>html</p>", "text")
         assert msg["From"] == "sender@example.com"
         assert msg["To"] == "to@example.com"

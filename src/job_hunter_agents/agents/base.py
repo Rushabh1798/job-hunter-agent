@@ -34,9 +34,7 @@ class BaseAgent(ABC):
     def __init__(self, settings: Settings) -> None:
         """Initialize with settings."""
         self.settings = settings
-        self._client = AsyncAnthropic(
-            api_key=settings.anthropic_api_key.get_secret_value()
-        )
+        self._client = AsyncAnthropic(api_key=settings.anthropic_api_key.get_secret_value())
         self._instructor = instructor.from_anthropic(self._client)
 
     @abstractmethod
@@ -52,9 +50,7 @@ class BaseAgent(ABC):
             **(context or {}),
         )
 
-    def _log_end(
-        self, duration: float, context: dict[str, object] | None = None
-    ) -> None:
+    def _log_end(self, duration: float, context: dict[str, object] | None = None) -> None:
         """Log agent execution end with duration."""
         logger.info(
             "agent_end",

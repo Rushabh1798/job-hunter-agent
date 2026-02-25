@@ -17,9 +17,7 @@ class TestWebScraper:
     async def test_fetch_page_crawl4ai_success(self) -> None:
         """fetch_page returns crawl4ai result when successful."""
         scraper = WebScraper()
-        with patch.object(
-            scraper, "_fetch_crawl4ai", new_callable=AsyncMock
-        ) as mock_crawl:
+        with patch.object(scraper, "_fetch_crawl4ai", new_callable=AsyncMock) as mock_crawl:
             mock_crawl.return_value = "# Page Content"
             result = await scraper.fetch_page("https://example.com")
 
@@ -63,9 +61,7 @@ class TestWebScraper:
         mock_client.__aexit__ = AsyncMock(return_value=None)
 
         with patch("httpx.AsyncClient", return_value=mock_client):
-            result = await scraper.fetch_json_api(
-                "https://api.example.com/jobs"
-            )
+            result = await scraper.fetch_json_api("https://api.example.com/jobs")
 
         assert result == {"jobs": [{"title": "SWE"}]}
 

@@ -35,4 +35,3 @@ class RedisCacheClient:
         """Check if a key exists."""
         count = await self._redis.exists(key)
         return bool(count)
-

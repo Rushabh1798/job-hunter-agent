@@ -138,9 +138,7 @@ class PipelineState:
         """Build a RunResult from current state."""
         from pathlib import Path
 
-        companies_succeeded = len({
-            j.company_id for j in self.raw_jobs
-        })
+        companies_succeeded = len({j.company_id for j in self.raw_jobs})
         return RunResult(
             run_id=self.config.run_id,
             status=status,

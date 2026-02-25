@@ -46,9 +46,7 @@ class EmailSender:
                 return await self._send_sendgrid(
                     to_email, subject, html_body, text_body, attachment_path
                 )
-            return await self._send_smtp(
-                to_email, subject, html_body, text_body, attachment_path
-            )
+            return await self._send_smtp(to_email, subject, html_body, text_body, attachment_path)
         except EmailDeliveryError:
             raise
         except Exception as e:
@@ -166,10 +164,7 @@ class EmailSender:
                     attachment = Attachment()
                     attachment.file_content = data
                     attachment.file_name = path.name
-                    xlsx_type = (
-                        "application/vnd.openxmlformats-"
-                        "officedocument.spreadsheetml.sheet"
-                    )
+                    xlsx_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                     attachment.file_type = xlsx_type
                     message.attachment = attachment
 

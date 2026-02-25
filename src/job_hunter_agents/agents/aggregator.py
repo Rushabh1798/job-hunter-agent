@@ -45,9 +45,12 @@ class AggregatorAgent(BaseAgent):
             output_files=output_files,
         )
 
-        self._log_end(time.monotonic() - start, {
-            "output_files": output_files,
-        })
+        self._log_end(
+            time.monotonic() - start,
+            {
+                "output_files": output_files,
+            },
+        )
         return state
 
     def _build_rows(self, state: PipelineState) -> list[dict[str, object]]:
@@ -62,26 +65,26 @@ class AggregatorAgent(BaseAgent):
             elif job.salary_min:
                 salary = f"${job.salary_min:,}+"
 
-            rows.append({
-                "Rank": sj.rank,
-                "Score": report.score,
-                "Recommendation": report.recommendation,
-                "Company": job.company_name,
-                "Title": job.title,
-                "Location": job.location or "",
-                "Remote Type": job.remote_type,
-                "Posted Date": str(job.posted_date) if job.posted_date else "",
-                "Salary Range": salary,
-                "Skill Match": ", ".join(report.skill_overlap),
-                "Skill Gaps": ", ".join(report.skill_gaps),
-                "Fit Summary": report.summary,
-                "Apply URL": str(job.apply_url),
-            })
+            rows.append(
+                {
+                    "Rank": sj.rank,
+                    "Score": report.score,
+                    "Recommendation": report.recommendation,
+                    "Company": job.company_name,
+                    "Title": job.title,
+                    "Location": job.location or "",
+                    "Remote Type": job.remote_type,
+                    "Posted Date": str(job.posted_date) if job.posted_date else "",
+                    "Salary Range": salary,
+                    "Skill Match": ", ".join(report.skill_overlap),
+                    "Skill Gaps": ", ".join(report.skill_gaps),
+                    "Fit Summary": report.summary,
+                    "Apply URL": str(job.apply_url),
+                }
+            )
         return rows
 
-    def _write_csv(
-        self, rows: list[dict[str, object]], path: Path
-    ) -> None:
+    def _write_csv(self, rows: list[dict[str, object]], path: Path) -> None:
         """Write rows to CSV file."""
         import csv
 

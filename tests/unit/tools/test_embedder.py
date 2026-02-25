@@ -43,9 +43,7 @@ class TestLocalEmbedder:
     async def test_embed_batch_multiple(self) -> None:
         """embed_batch returns one vector per input text."""
         mock_model = MagicMock()
-        mock_model.encode.return_value = np.array(
-            [[0.1, 0.2], [0.3, 0.4]]
-        )
+        mock_model.encode.return_value = np.array([[0.1, 0.2], [0.3, 0.4]])
 
         embedder = LocalEmbedder()
         embedder._model = mock_model
@@ -87,9 +85,7 @@ class TestVoyageEmbedder:
     async def test_embed_text_delegates_to_batch(self) -> None:
         """embed_text calls embed_batch with single element."""
         embedder = VoyageEmbedder(api_key="test-key")
-        with patch.object(
-            embedder, "embed_batch", new_callable=AsyncMock
-        ) as mock_batch:
+        with patch.object(embedder, "embed_batch", new_callable=AsyncMock) as mock_batch:
             mock_batch.return_value = [[0.1, 0.2, 0.3]]
             result = await embedder.embed_text("hello")
 

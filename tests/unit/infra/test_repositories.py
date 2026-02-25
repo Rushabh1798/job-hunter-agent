@@ -114,10 +114,12 @@ class TestCompanyRepository:
         """List companies with pagination."""
         repo = CompanyRepository(session)
         for i in range(3):
-            await repo.create(CompanyModel(
-                name=f"Company {i}",
-                domain=f"company{i}.com",
-                career_url=f"https://company{i}.com/careers",
-            ))
+            await repo.create(
+                CompanyModel(
+                    name=f"Company {i}",
+                    domain=f"company{i}.com",
+                    career_url=f"https://company{i}.com/careers",
+                )
+            )
         results = await repo.list_all(limit=2)
         assert len(results) == 2

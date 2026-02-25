@@ -13,9 +13,7 @@ from job_hunter_core.models.run import PipelineCheckpoint
 logger = structlog.get_logger()
 
 
-def save_checkpoint(
-    checkpoint: PipelineCheckpoint, checkpoint_dir: Path
-) -> Path:
+def save_checkpoint(checkpoint: PipelineCheckpoint, checkpoint_dir: Path) -> Path:
     """Save checkpoint to JSON file."""
     checkpoint_dir.mkdir(parents=True, exist_ok=True)
     filename = f"{checkpoint.run_id}--{checkpoint.completed_step}.json"
@@ -34,9 +32,7 @@ def save_checkpoint(
         raise CheckpointError(msg) from e
 
 
-def load_latest_checkpoint(
-    run_id: str, checkpoint_dir: Path
-) -> PipelineCheckpoint | None:
+def load_latest_checkpoint(run_id: str, checkpoint_dir: Path) -> PipelineCheckpoint | None:
     """Load the most recent checkpoint for a given run ID."""
     if not checkpoint_dir.exists():
         return None

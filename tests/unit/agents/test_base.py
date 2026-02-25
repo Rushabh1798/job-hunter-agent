@@ -86,9 +86,7 @@ class TestCallLLM:
     async def test_call_llm_tracks_cost_with_state(self) -> None:
         """_track_cost is called when state is provided."""
         agent = _create_stub_agent()
-        agent._instructor.messages.create = AsyncMock(
-            return_value=_DummyResponse(answer="ok")
-        )
+        agent._instructor.messages.create = AsyncMock(return_value=_DummyResponse(answer="ok"))
         state = make_pipeline_state()
 
         with (
@@ -111,9 +109,7 @@ class TestCallLLM:
     async def test_call_llm_no_tracking_without_state(self) -> None:
         """_track_cost is NOT called when state=None."""
         agent = _create_stub_agent()
-        agent._instructor.messages.create = AsyncMock(
-            return_value=_DummyResponse(answer="ok")
-        )
+        agent._instructor.messages.create = AsyncMock(return_value=_DummyResponse(answer="ok"))
 
         with (
             patch(

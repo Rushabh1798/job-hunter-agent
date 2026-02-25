@@ -35,12 +35,14 @@ class WebSearchTool:
             response = self._client.search(query=query, max_results=max_results)
             results: list[SearchResult] = []
             for item in response.get("results", []):
-                results.append(SearchResult(
-                    title=item.get("title", ""),
-                    url=item.get("url", ""),
-                    content=item.get("content", ""),
-                    score=item.get("score", 0.0),
-                ))
+                results.append(
+                    SearchResult(
+                        title=item.get("title", ""),
+                        url=item.get("url", ""),
+                        content=item.get("content", ""),
+                        score=item.get("score", 0.0),
+                    )
+                )
             return results
 
         return await asyncio.to_thread(_search)

@@ -29,10 +29,6 @@ class RunRepository:
 
     async def list_recent(self, limit: int = 10) -> list[RunHistoryModel]:
         """List recent runs ordered by creation time."""
-        stmt = (
-            select(RunHistoryModel)
-            .order_by(RunHistoryModel.created_at.desc())
-            .limit(limit)
-        )
+        stmt = select(RunHistoryModel).order_by(RunHistoryModel.created_at.desc()).limit(limit)
         result = await self._session.execute(stmt)
         return list(result.scalars().all())

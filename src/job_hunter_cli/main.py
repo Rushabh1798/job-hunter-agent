@@ -24,33 +24,21 @@ logger = structlog.get_logger()
 
 @app.command()
 def run(
-    resume: Path = typer.Argument(
-        ..., help="Path to resume PDF", exists=True
-    ),
-    prefs: str = typer.Option(
-        "", "--prefs", help="Freeform job preferences text"
-    ),
+    resume: Path = typer.Argument(..., help="Path to resume PDF", exists=True),
+    prefs: str = typer.Option("", "--prefs", help="Freeform job preferences text"),
     prefs_file: Path | None = typer.Option(
         None, "--prefs-file", help="File containing preferences text"
     ),
-    dry_run: bool = typer.Option(
-        False, "--dry-run", help="Skip email, generate files only"
-    ),
-    force_rescrape: bool = typer.Option(
-        False, "--force-rescrape", help="Ignore scrape cache"
-    ),
+    dry_run: bool = typer.Option(False, "--dry-run", help="Skip email, generate files only"),
+    force_rescrape: bool = typer.Option(False, "--force-rescrape", help="Ignore scrape cache"),
     company_limit: int | None = typer.Option(
         None, "--company-limit", help="Cap companies for testing"
     ),
-    lite: bool = typer.Option(
-        False, "--lite", help="SQLite + local embeddings, no Docker"
-    ),
+    lite: bool = typer.Option(False, "--lite", help="SQLite + local embeddings, no Docker"),
     resume_from: str | None = typer.Option(
         None, "--resume-from", help="Resume from checkpoint run_id"
     ),
-    verbose: bool = typer.Option(
-        False, "-v", "--verbose", help="Enable debug logging"
-    ),
+    verbose: bool = typer.Option(False, "-v", "--verbose", help="Enable debug logging"),
 ) -> None:
     """Run the job hunter pipeline."""
     # Resolve preferences text

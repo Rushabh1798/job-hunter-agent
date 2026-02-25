@@ -77,16 +77,22 @@ class TestJobsScorerAgent:
         settings = _make_settings()
         state = _make_state_with_jobs()
 
-        mock_result = BatchScoreResult(scores=[
-            JobScore(
-                job_index=0, score=75, summary="Good fit",
-                recommendation="good_match",
-            ),
-            JobScore(
-                job_index=1, score=85, summary="Strong fit",
-                recommendation="strong_match",
-            ),
-        ])
+        mock_result = BatchScoreResult(
+            scores=[
+                JobScore(
+                    job_index=0,
+                    score=75,
+                    summary="Good fit",
+                    recommendation="good_match",
+                ),
+                JobScore(
+                    job_index=1,
+                    score=85,
+                    summary="Strong fit",
+                    recommendation="strong_match",
+                ),
+            ]
+        )
 
         with (
             patch.object(
@@ -112,16 +118,22 @@ class TestJobsScorerAgent:
         settings.min_score_threshold = 80
         state = _make_state_with_jobs()
 
-        mock_result = BatchScoreResult(scores=[
-            JobScore(
-                job_index=0, score=50, summary="Weak",
-                recommendation="mismatch",
-            ),
-            JobScore(
-                job_index=1, score=85, summary="Strong",
-                recommendation="strong_match",
-            ),
-        ])
+        mock_result = BatchScoreResult(
+            scores=[
+                JobScore(
+                    job_index=0,
+                    score=50,
+                    summary="Weak",
+                    recommendation="mismatch",
+                ),
+                JobScore(
+                    job_index=1,
+                    score=85,
+                    summary="Strong",
+                    recommendation="strong_match",
+                ),
+            ]
+        )
 
         with (
             patch.object(

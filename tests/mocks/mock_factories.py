@@ -83,9 +83,7 @@ def make_company(**overrides: object) -> Company:
     return Company(**defaults)  # type: ignore[arg-type]
 
 
-def make_raw_job(
-    company_id: UUID | None = None, **overrides: object
-) -> RawJob:
+def make_raw_job(company_id: UUID | None = None, **overrides: object) -> RawJob:
     """Create a valid RawJob."""
     cid = company_id or uuid4()
     defaults: dict[str, object] = {
@@ -118,9 +116,7 @@ def make_normalized_job(
     return NormalizedJob(**defaults)  # type: ignore[arg-type]
 
 
-def make_scored_job(
-    job: NormalizedJob | None = None, **overrides: object
-) -> ScoredJob:
+def make_scored_job(job: NormalizedJob | None = None, **overrides: object) -> ScoredJob:
     """Create a valid ScoredJob with a default FitReport."""
     if job is None:
         job = make_normalized_job()

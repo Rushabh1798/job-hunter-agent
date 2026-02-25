@@ -121,6 +121,97 @@ async def test_step_result_tracks_token_delta() -> None:
         )
 
         result = await parse_prefs_activity(payload)
-        # MockAgent adds 100 tokens and 0.01 cost
         assert result.tokens_used == 100
         assert result.cost_usd == pytest.approx(0.01)
+
+
+@pytest.mark.asyncio
+async def test_process_jobs_activity_calls_agent() -> None:
+    """process_jobs_activity delegates to JobProcessorAgent."""
+    payload = StepInput(state_snapshot=_make_state_snapshot())
+
+    with (
+        patch(
+            "job_hunter_agents.orchestrator.temporal_activities._get_settings",
+            return_value=MagicMock(),
+        ),
+        patch(
+            "job_hunter_agents.orchestrator.temporal_registry.AGENT_MAP",
+            {"JobProcessorAgent": _MockAgent},
+        ),
+    ):
+        from job_hunter_agents.orchestrator.temporal_activities import (
+            process_jobs_activity,
+        )
+
+        result = await process_jobs_activity(payload)
+        assert result.tokens_used == 100
+
+
+@pytest.mark.asyncio
+async def test_score_jobs_activity_calls_agent() -> None:
+    """score_jobs_activity delegates to JobsScorerAgent."""
+    payload = StepInput(state_snapshot=_make_state_snapshot())
+
+    with (
+        patch(
+            "job_hunter_agents.orchestrator.temporal_activities._get_settings",
+            return_value=MagicMock(),
+        ),
+        patch(
+            "job_hunter_agents.orchestrator.temporal_registry.AGENT_MAP",
+            {"JobsScorerAgent": _MockAgent},
+        ),
+    ):
+        from job_hunter_agents.orchestrator.temporal_activities import (
+            score_jobs_activity,
+        )
+
+        result = await score_jobs_activity(payload)
+        assert result.tokens_used == 100
+
+
+@pytest.mark.asyncio
+async def test_aggregate_activity_calls_agent() -> None:
+    """aggregate_activity delegates to AggregatorAgent."""
+    payload = StepInput(state_snapshot=_make_state_snapshot())
+
+    with (
+        patch(
+            "job_hunter_agents.orchestrator.temporal_activities._get_settings",
+            return_value=MagicMock(),
+        ),
+        patch(
+            "job_hunter_agents.orchestrator.temporal_registry.AGENT_MAP",
+            {"AggregatorAgent": _MockAgent},
+        ),
+    ):
+        from job_hunter_agents.orchestrator.temporal_activities import (
+            aggregate_activity,
+        )
+
+        result = await aggregate_activity(payload)
+        assert result.tokens_used == 100
+
+
+@pytest.mark.asyncio
+async def test_notify_activity_calls_agent() -> None:
+    """notify_activity delegates to NotifierAgent."""
+    payload = StepInput(state_snapshot=_make_state_snapshot())
+
+    with (
+        patch(
+            "job_hunter_agents.orchestrator.temporal_activities._get_settings",
+            return_value=MagicMock(),
+        ),
+        patch(
+            "job_hunter_agents.orchestrator.temporal_registry.AGENT_MAP",
+            {"NotifierAgent": _MockAgent},
+        ),
+    ):
+        from job_hunter_agents.orchestrator.temporal_activities import (
+            notify_activity,
+        )
+
+        result = await notify_activity(payload)
+        assert result.tokens_used == 100

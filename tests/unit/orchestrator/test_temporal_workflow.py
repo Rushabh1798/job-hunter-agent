@@ -2,9 +2,14 @@
 
 from __future__ import annotations
 
+from typing import Any
+from unittest.mock import AsyncMock, patch
+
 import pytest
 
 from job_hunter_agents.orchestrator.temporal_payloads import (
+    ScrapeCompanyResult,
+    StepResult,
     WorkflowInput,
     WorkflowOutput,
 )
@@ -26,6 +31,41 @@ def _make_workflow_input(**overrides: object) -> WorkflowInput:
     }
     defaults.update(overrides)
     return WorkflowInput(**defaults)  # type: ignore[arg-type]
+
+
+def _make_step_result(
+    snapshot: dict[str, Any] | None = None,
+    tokens: int = 50,
+    cost: float = 0.01,
+) -> StepResult:
+    """Build a StepResult with defaults."""
+    return StepResult(
+        state_snapshot=snapshot or _make_snapshot(),
+        tokens_used=tokens,
+        cost_usd=cost,
+    )
+
+
+def _make_snapshot(**overrides: object) -> dict[str, Any]:
+    """Build a minimal state snapshot."""
+    base: dict[str, Any] = {
+        "config": {
+            "run_id": "test_run",
+            "resume_path": "/tmp/resume.pdf",
+            "preferences_text": "Python dev",
+        },
+        "profile": None,
+        "preferences": None,
+        "companies": [],
+        "raw_jobs": [],
+        "normalized_jobs": [],
+        "scored_jobs": [],
+        "errors": [],
+        "total_tokens": 0,
+        "total_cost_usd": 0.0,
+    }
+    base.update(overrides)
+    return base
 
 
 class TestBuildInitialSnapshot:
@@ -94,14 +134,25 @@ class TestBuildOutput:
         assert output.companies_attempted == 0
         assert output.jobs_scraped == 0
 
+    def test_output_with_non_dict_run_result(self) -> None:
+        """Output handles non-dict run_result gracefully."""
+        snapshot: dict[str, Any] = {
+            "companies": [],
+            "raw_jobs": [],
+            "scored_jobs": [],
+            "errors": [],
+            "run_result": "not_a_dict",
+        }
+        output = JobHuntWorkflow._build_output(snapshot, 0, 0.0, 1.0)
+        assert output.output_files == []
+        assert output.email_sent is False
+
 
 class TestExtract:
     """Tests for _extract helper."""
 
     def test_returns_tuple(self) -> None:
         """Extracts snapshot, tokens, and cost."""
-        from job_hunter_agents.orchestrator.temporal_payloads import StepResult
-
         result = StepResult(
             state_snapshot={"key": "val"},
             tokens_used=42,
@@ -111,3 +162,81 @@ class TestExtract:
         assert snapshot == {"key": "val"}
         assert tokens == 42
         assert cost == pytest.approx(0.05)
+
+
+class TestScrapeParallel:
+    """Tests for _scrape_parallel."""
+
+    @pytest.mark.asyncio
+    async def test_empty_companies(self) -> None:
+        """No companies means no scraping."""
+        wf = JobHuntWorkflow()
+        input = _make_workflow_input()
+        snapshot = _make_snapshot(companies=[])
+
+        result_snapshot, tokens, cost = await wf._scrape_parallel(snapshot, input)
+        assert tokens == 0
+        assert cost == 0.0
+        assert result_snapshot["raw_jobs"] == []
+
+    @pytest.mark.asyncio
+    async def test_parallel_scraping_merges_results(self) -> None:
+        """Scrape results from multiple companies are merged."""
+        wf = JobHuntWorkflow()
+        input = _make_workflow_input()
+        snapshot = _make_snapshot(
+            companies=[
+                {"name": "Co1", "career_url": "https://co1.com"},
+                {"name": "Co2", "career_url": "https://co2.com"},
+            ],
+            config={"run_id": "test"},
+        )
+
+        result1 = ScrapeCompanyResult(
+            raw_jobs=[{"title": "Job1", "company_id": "1"}],
+            tokens_used=100,
+            cost_usd=0.01,
+            errors=[],
+        )
+        result2 = ScrapeCompanyResult(
+            raw_jobs=[{"title": "Job2", "company_id": "2"}],
+            tokens_used=200,
+            cost_usd=0.02,
+            errors=[{"error": "timeout"}],
+        )
+
+        with patch(
+            "job_hunter_agents.orchestrator.temporal_workflow.workflow"
+        ) as mock_wf:
+            mock_wf.execute_activity = AsyncMock(side_effect=[result1, result2])
+
+            result_snapshot, tokens, cost = await wf._scrape_parallel(snapshot, input)
+
+        assert len(result_snapshot["raw_jobs"]) == 2
+        assert tokens == 300
+        assert cost == pytest.approx(0.03)
+        assert len(result_snapshot["errors"]) == 1
+
+
+class TestRunStep:
+    """Tests for _run_step."""
+
+    @pytest.mark.asyncio
+    async def test_run_step_calls_execute_activity(self) -> None:
+        """_run_step delegates to workflow.execute_activity."""
+        wf = JobHuntWorkflow()
+        expected_result = _make_step_result()
+
+        with patch(
+            "job_hunter_agents.orchestrator.temporal_workflow.workflow"
+        ) as mock_wf:
+            mock_wf.execute_activity = AsyncMock(return_value=expected_result)
+
+            from job_hunter_agents.orchestrator.temporal_workflow import _DEFAULT_RETRY
+
+            result = await wf._run_step(
+                "parse_resume", _make_snapshot(), "q-default", _DEFAULT_RETRY, minutes=2
+            )
+
+        assert result.tokens_used == 50
+        mock_wf.execute_activity.assert_called_once()

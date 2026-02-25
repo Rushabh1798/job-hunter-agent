@@ -7,8 +7,9 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from job_hunter_agents.orchestrator.temporal_payloads import WorkflowOutput
 from job_hunter_core.exceptions import TemporalConnectionError
-from job_hunter_core.models.run import RunResult
+from job_hunter_core.models.run import RunConfig, RunResult
 
 pytestmark = pytest.mark.unit
 
@@ -29,17 +30,15 @@ def temporal_settings(mock_settings: MagicMock) -> MagicMock:
     return mock_settings
 
 
-def _make_run_config() -> MagicMock:
+def _make_run_config() -> RunConfig:
     """Create a mock RunConfig."""
     from tests.mocks.mock_factories import make_run_config
 
     return make_run_config()
 
 
-def _make_workflow_output() -> MagicMock:
-    """Create a mock WorkflowOutput."""
-    from job_hunter_agents.orchestrator.temporal_payloads import WorkflowOutput
-
+def _make_workflow_output() -> WorkflowOutput:
+    """Create a WorkflowOutput for testing."""
     return WorkflowOutput(
         status="success",
         companies_attempted=5,

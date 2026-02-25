@@ -12,6 +12,7 @@ from __future__ import annotations
 import asyncio
 import time
 from datetime import timedelta
+from typing import Any
 
 from temporalio import workflow
 from temporalio.common import RetryPolicy
@@ -55,7 +56,7 @@ _LLM_RETRY = RetryPolicy(
 class JobHuntWorkflow:
     """Durable workflow orchestrating the 8-step job hunt pipeline."""
 
-    @workflow.run
+    @workflow.run  # type: ignore[misc,untyped-decorator]
     async def run(self, input: WorkflowInput) -> WorkflowOutput:
         """Execute the full job hunt pipeline as Temporal activities."""
         start = time.monotonic()
@@ -90,9 +91,7 @@ class JobHuntWorkflow:
         total_cost += cost
 
         # Step 4: scrape_jobs — parallel per company
-        state_snapshot, tokens, cost = await self._scrape_parallel(
-            state_snapshot, input
-        )
+        state_snapshot, tokens, cost = await self._scrape_parallel(state_snapshot, input)
         total_tokens += tokens
         total_cost += cost
 
@@ -134,25 +133,26 @@ class JobHuntWorkflow:
     async def _run_step(
         self,
         activity_name: str,
-        state_snapshot: dict,
+        state_snapshot: dict[str, Any],
         task_queue: str,
         retry_policy: RetryPolicy,
         minutes: int,
     ) -> StepResult:
         """Execute a single agent step activity."""
-        return await workflow.execute_activity(
+        result: StepResult = await workflow.execute_activity(
             activity_name,
             StepInput(state_snapshot=state_snapshot),
             task_queue=task_queue,
             start_to_close_timeout=timedelta(minutes=minutes),
             retry_policy=retry_policy,
         )
+        return result
 
     async def _scrape_parallel(
         self,
-        state_snapshot: dict,
+        state_snapshot: dict[str, Any],
         input: WorkflowInput,
-    ) -> tuple[dict, int, float]:
+    ) -> tuple[dict[str, Any], int, float]:
         """Scrape all companies in parallel, merge results back."""
         companies = state_snapshot.get("companies", [])
         config_data = state_snapshot.get("config", {})
@@ -191,7 +191,7 @@ class JobHuntWorkflow:
         return state_snapshot, total_tokens, total_cost
 
     @staticmethod
-    def _build_initial_snapshot(input: WorkflowInput) -> dict:
+    def _build_initial_snapshot(input: WorkflowInput) -> dict[str, Any]:
         """Build the initial state snapshot from workflow input."""
         return {
             "config": {
@@ -216,13 +216,13 @@ class JobHuntWorkflow:
         }
 
     @staticmethod
-    def _extract(result: StepResult) -> tuple[dict, int, float]:
+    def _extract(result: StepResult) -> tuple[dict[str, Any], int, float]:
         """Extract snapshot, tokens, and cost from a StepResult."""
         return result.state_snapshot, result.tokens_used, result.cost_usd
 
     @staticmethod
     def _build_output(
-        snapshot: dict,
+        snapshot: dict[str, Any],
         total_tokens: int,
         total_cost: float,
         duration: float,

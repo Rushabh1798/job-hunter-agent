@@ -43,11 +43,14 @@ def _state_from_snapshot(snapshot: dict[str, Any]) -> Any:  # noqa: ANN401
 def _state_to_snapshot(state: Any, step_name: str) -> dict[str, Any]:  # noqa: ANN401
     """Serialize PipelineState to a checkpoint snapshot dict."""
     checkpoint = state.to_checkpoint(step_name)
-    return json.loads(checkpoint.model_dump_json())["state_snapshot"]
+    result: dict[str, Any] = json.loads(checkpoint.model_dump_json())["state_snapshot"]
+    return result
 
 
 async def _run_agent_step(
-    step_name: str, agent_cls_name: str, payload: StepInput,
+    step_name: str,
+    agent_cls_name: str,
+    payload: StepInput,
 ) -> StepResult:
     """Common logic for running an agent step activity."""
     from job_hunter_agents.orchestrator.temporal_registry import AGENT_MAP
@@ -69,49 +72,49 @@ async def _run_agent_step(
     )
 
 
-@activity.defn(name="parse_resume")
+@activity.defn(name="parse_resume")  # type: ignore[misc,untyped-decorator]
 async def parse_resume_activity(payload: StepInput) -> StepResult:
     """Extract CandidateProfile from resume PDF."""
     return await _run_agent_step("parse_resume", "ResumeParserAgent", payload)
 
 
-@activity.defn(name="parse_prefs")
+@activity.defn(name="parse_prefs")  # type: ignore[misc,untyped-decorator]
 async def parse_prefs_activity(payload: StepInput) -> StepResult:
     """Parse freeform preferences into SearchPreferences."""
     return await _run_agent_step("parse_prefs", "PrefsParserAgent", payload)
 
 
-@activity.defn(name="find_companies")
+@activity.defn(name="find_companies")  # type: ignore[misc,untyped-decorator]
 async def find_companies_activity(payload: StepInput) -> StepResult:
     """Discover target companies via web search and LLM reasoning."""
     return await _run_agent_step("find_companies", "CompanyFinderAgent", payload)
 
 
-@activity.defn(name="process_jobs")
+@activity.defn(name="process_jobs")  # type: ignore[misc,untyped-decorator]
 async def process_jobs_activity(payload: StepInput) -> StepResult:
     """Normalize raw jobs and compute embeddings."""
     return await _run_agent_step("process_jobs", "JobProcessorAgent", payload)
 
 
-@activity.defn(name="score_jobs")
+@activity.defn(name="score_jobs")  # type: ignore[misc,untyped-decorator]
 async def score_jobs_activity(payload: StepInput) -> StepResult:
     """Score and rank normalized jobs against candidate profile."""
     return await _run_agent_step("score_jobs", "JobsScorerAgent", payload)
 
 
-@activity.defn(name="aggregate")
+@activity.defn(name="aggregate")  # type: ignore[misc,untyped-decorator]
 async def aggregate_activity(payload: StepInput) -> StepResult:
     """Generate CSV/Excel output files."""
     return await _run_agent_step("aggregate", "AggregatorAgent", payload)
 
 
-@activity.defn(name="notify")
+@activity.defn(name="notify")  # type: ignore[misc,untyped-decorator]
 async def notify_activity(payload: StepInput) -> StepResult:
     """Send email notification with results."""
     return await _run_agent_step("notify", "NotifierAgent", payload)
 
 
-@activity.defn(name="scrape_company")
+@activity.defn(name="scrape_company")  # type: ignore[misc,untyped-decorator]
 async def scrape_company_activity(payload: ScrapeCompanyInput) -> ScrapeCompanyResult:
     """Scrape jobs from a single company's career page."""
     from job_hunter_core.models.company import Company

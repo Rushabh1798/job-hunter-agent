@@ -25,7 +25,11 @@ from job_hunter_infra.db.models import Base
 
 
 def _tcp_reachable(
-    host: str, port: int, timeout: float = 1.0, retries: int = 5, delay: float = 0.5,
+    host: str,
+    port: int,
+    timeout: float = 1.0,
+    retries: int = 5,
+    delay: float = 0.5,
 ) -> bool:
     """Check if a TCP service is reachable, retrying on failure."""
     for attempt in range(retries):

@@ -13,9 +13,9 @@ from job_hunter_agents.orchestrator.temporal_payloads import (
 pytestmark = pytest.mark.unit
 
 
-def _make_state_snapshot(**overrides: object) -> dict:
+def _make_state_snapshot(**overrides: object) -> dict[str, object]:
     """Build a minimal state snapshot for testing."""
-    base: dict = {
+    base: dict[str, object] = {
         "config": {
             "run_id": "test_run",
             "resume_path": "/tmp/resume.pdf",

@@ -54,8 +54,8 @@ async def test_create_client_mtls(temporal_settings: MagicMock) -> None:
 
     def fake_open(path: str, mode: str = "r") -> MagicMock:
         if "client.pem" in path:
-            return mock_open(read_data=cert_data)()
-        return mock_open(read_data=key_data)()
+            return mock_open(read_data=cert_data)()  # type: ignore[no-any-return]
+        return mock_open(read_data=key_data)()  # type: ignore[no-any-return]
 
     with (
         patch("builtins.open", side_effect=fake_open),

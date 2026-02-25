@@ -84,7 +84,7 @@ class TestBuildOutput:
 
     def test_empty_snapshot(self) -> None:
         """Output handles empty snapshot gracefully."""
-        snapshot = {
+        snapshot: dict[str, list[object]] = {
             "companies": [],
             "raw_jobs": [],
             "scored_jobs": [],

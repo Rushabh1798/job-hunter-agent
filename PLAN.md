@@ -5,17 +5,20 @@
 ### Decision: Monorepo over Multi-Repo
 Using a monorepo with `src/` layout and four packages (`job_hunter_core`, `job_hunter_agents`, `job_hunter_infra`, `job_hunter_cli`). Rationale: the spec's pragmatic note explicitly permits this; a single git repo with clear package boundaries is faster to develop and easier to test while maintaining separation of concerns. Packages can be split later if needed.
 
-### Decision: Phase 1 MVP uses checkpoint files, not Temporal
-Per AD-2, the MVP uses JSON checkpoint files for crash recovery. Temporal is deferred to a future production phase.
+### Decision: Async pipeline with JSON checkpoints (MVP)
+Phase 1 (MVP) uses a sequential async pipeline (`Pipeline` class) with JSON checkpoint files for crash recovery. After each agent step, a checkpoint is saved to `checkpoint_dir`; on restart, the pipeline resumes from the last completed step. Temporal is planned for Phase 2 (post-MVP) to provide production-grade durability, but is not required for the MVP.
 
 ### Decision: SQLite as default DB backend
-Per AD-5, the default mode is `--lite` with SQLite. PostgreSQL is optional for recurring/multi-user use.
+Per AD-5, the default mode is `--lite` with SQLite. PostgreSQL is optional for recurring/multi-user use and is the recommended backend for long-running or multi-user deployments.
 
 ### Decision: Local embeddings by default
 Per AD-4, `sentence-transformers` with `all-MiniLM-L6-v2` (384-dim) is the default. No API key needed.
 
 ### Decision: crawl4ai as primary scraper
 Per AD-7, crawl4ai handles SPA rendering, JS execution, and content extraction. Raw Playwright is a fallback only.
+
+### Decision: Redis/DB-backed caching instead of diskcache
+Persistent caching for HTML pages, company URLs, and other derived artifacts uses Redis by default, with an option to fall back to database-backed caches where Redis is unavailable. The previous `diskcache`-based implementation is removed; all cache clients must implement the `CacheClient` protocol from `job_hunter_core` and be safe under concurrent access and pipeline retries.
 
 ---
 
@@ -91,7 +94,8 @@ job-hunter-agent/
 │   │   │       └── run_repo.py        # RunRepository
 │   │   ├── cache/
 │   │   │   ├── __init__.py
-│   │   │   ├── disk_cache.py          # DiskCacheClient implementation
+│   │   │   ├── redis_cache.py         # RedisCacheClient implementation
+│   │   │   ├── db_cache.py            # DBCacheClient implementation (fallback)
 │   │   │   ├── page_cache.py          # PageCache (HTML content)
 │   │   │   └── company_cache.py       # CompanyURLCache (career URLs)
 │   │   └── vector/
@@ -136,16 +140,15 @@ job-hunter-agent/
 │   │   │   ├── __init__.py
 │   │   │   ├── pipeline.py            # Pipeline class with checkpoint/resume
 │   │   │   └── checkpoint.py          # Checkpoint serialization/deserialization
-│   │   └── observability/
+│   │   └── observability/             # TODO: Phase 6
 │   │       ├── __init__.py
-│   │       ├── logging.py             # structlog configuration
-│   │       ├── tracing.py             # LangSmith tracing (optional)
-│   │       └── cost_tracker.py        # Per-run cost accumulator + guardrail
+│   │       ├── logging.py             # structlog configuration (TODO)
+│   │       ├── tracing.py             # LangSmith tracing (TODO)
+│   │       └── cost_tracker.py        # Per-run cost accumulator + guardrail (TODO)
 │   │
 │   └── job_hunter_cli/                # CLI — depends on all packages
 │       ├── __init__.py
-│       ├── main.py                    # typer CLI app with commands
-│       └── runner.py                  # Async run coordinator
+│       └── main.py                    # typer CLI app with commands
 │
 ├── tests/
 │   ├── conftest.py                    # Shared fixtures
@@ -174,13 +177,15 @@ job-hunter-agent/
 │   │   │   ├── test_email_sender.py   # Email sender tests
 │   │   │   └── test_ats_clients.py    # ATS client tests
 │   │   └── infra/
-│   │       ├── test_disk_cache.py     # Cache tests
+│   │       ├── test_cache_backends.py # Redis + DB cache tests
 │   │       ├── test_similarity.py     # Vector similarity tests
 │   │       └── test_repositories.py   # Repository tests (SQLite)
 │   ├── integration/
-│   │   ├── conftest.py               # Integration fixtures (real SQLite)
+│   │   ├── conftest.py               # Integration fixtures (real SQLite/Postgres)
 │   │   ├── test_pipeline.py           # Full pipeline integration test
 │   │   └── test_db_lifecycle.py       # DB CRUD lifecycle tests
+│   ├── e2e/
+│   │   └── test_full_pipeline.py      # End-to-end pipeline test (--dry-run)
 │   └── fixtures/
 │       ├── sample_resume.pdf          # Test resume PDF
 │       ├── sample_greenhouse.json     # Greenhouse API response
@@ -189,7 +194,6 @@ job-hunter-agent/
 │       └── sample_jd.html            # Job description HTML
 │
 └── output/                            # Runtime output (gitignored)
-    └── checkpoints/                   # Pipeline checkpoint files
 ```
 
 ---
@@ -215,9 +219,10 @@ job_hunter_infra (depends on core)
   ├── db/models.py            ← sqlalchemy, core.models
   ├── db/session.py           ← sqlalchemy, db.engine
   ├── db/repositories/*.py    ← sqlalchemy, db.models, core.models
-  ├── cache/disk_cache.py     ← diskcache, core.interfaces.cache
-  ├── cache/page_cache.py     ← cache.disk_cache
-  ├── cache/company_cache.py  ← cache.disk_cache
+  ├── cache/redis_cache.py    ← redis/aioredis, core.interfaces.cache
+  ├── cache/db_cache.py       ← sqlalchemy, core.interfaces.cache
+  ├── cache/page_cache.py     ← cache.redis_cache or cache.db_cache
+  ├── cache/company_cache.py  ← cache.redis_cache or cache.db_cache
   └── vector/similarity.py    ← numpy
 
 job_hunter_agents (depends on core + infra)
@@ -242,8 +247,7 @@ job_hunter_agents (depends on core + infra)
   └── observability/*.py      ← structlog, langsmith
 
 job_hunter_cli (depends on all)
-  ├── main.py                 ← typer, rich, core.config, orchestrator.pipeline
-  └── runner.py               ← asyncio, orchestrator.pipeline
+  └── main.py                 ← typer, rich, core.config, orchestrator.pipeline
 ```
 
 **No circular imports**: core -> infra -> agents -> cli (strict one-way dependency).
@@ -384,49 +388,50 @@ CREATE INDEX idx_jobs_embedding ON jobs_normalized
 
 ---
 
-## 4. Pipeline Execution Graph
+## 4. Pipeline Execution Graph (Sequential Async Pipeline with Checkpoints)
 
 ```
-START
+START (Pipeline.run)
   │
   ▼
-[1. parse_resume] ─────── Checkpoint: resume_parsed.json
+[1. parse_resume] ─────── ResumeParserAgent.run → checkpoint saved
   │                         State: config + profile
   ▼
-[2. parse_prefs] ──────── Checkpoint: prefs_parsed.json
+[2. parse_prefs] ──────── PrefsParserAgent.run → checkpoint saved
   │                         State: + preferences
   ▼
-[3. find_companies] ───── Checkpoint: companies_found.json
+[3. find_companies] ───── CompanyFinderAgent.run → checkpoint saved
   │                         State: + companies[]
   │                         Error route: 0 companies → fatal, stop
   ▼
-[4. scrape_jobs] ─────── Checkpoint: jobs_scraped.json
+[4. scrape_jobs] ─────── JobsScraperAgent.run → checkpoint saved
   │                         State: + raw_jobs[]
   │                         Error route: per-company errors logged, continue
   ▼
-[5. process_jobs] ─────── Checkpoint: jobs_processed.json
+[5. process_jobs] ─────── JobProcessorAgent.run → checkpoint saved
   │                         State: + normalized_jobs[] (with embeddings)
   │                         Error route: per-job errors logged, continue
   ▼
-[6. score_jobs] ──────── Checkpoint: jobs_scored.json
+[6. score_jobs] ──────── JobsScorerAgent.run → checkpoint saved
   │                         State: + scored_jobs[]
   │                         Error route: 0 above threshold → empty report
   ▼
-[7. aggregate] ──────── Checkpoint: aggregated.json
+[7. aggregate] ──────── AggregatorAgent.run → checkpoint saved
   │                         State: + output files written
   ▼
-[8. notify] ─────────── Checkpoint: notified.json
+[8. notify] ─────────── NotifierAgent.run → checkpoint saved
   │                         State: + email_sent flag
   ▼
-END → RunResult
+END → RunResult (summarized from PipelineState)
 ```
 
 **Error routes**:
 - Any step: `CostLimitExceededError` → checkpoint + stop with status="partial"
 - Any step: `FatalAgentError` → checkpoint + stop with status="failed"
 - Non-fatal errors: logged to `state.errors[]`, pipeline continues
+- Per-agent timeout: `asyncio.wait_for` with configurable `agent_timeout_seconds`
 
-**Resume from checkpoint**: On startup, check `checkpoint_dir` for `{run_id}_*.json` files. Load the latest completed step's checkpoint and skip completed steps.
+**Resume from checkpoint**: On startup, check `checkpoint_dir` for `{run_id}--*.json` files. Load the latest completed step's checkpoint and skip completed steps.
 
 ---
 
@@ -525,7 +530,7 @@ State (TypedDict):
 | 4 | Career page URL detection fails (company not found) | Medium | Medium | Multi-strategy: ATS API check → Tavily search → common path crawl; cache successful URLs; log failures |
 | 5 | Rate limiting by career sites | Medium | Medium | Per-domain semaphore (3 req/min); asyncio.Semaphore for concurrency; tenacity exponential backoff |
 | 6 | PDF parsing fails (scanned, encrypted, image-only) | Low | Medium | docling → pdfplumber → pypdf fallback chain; clear error messages for unsupported formats |
-| 7 | Pipeline crash mid-run loses progress | Medium | High | JSON checkpoint after each step; automatic resume from last checkpoint on restart |
+| 7 | Pipeline crash mid-run loses progress | Medium | High | JSON checkpoint files with per-step serialization; pipeline resumes from last completed step; DB-backed state for large artifacts; idempotent operations via content_hash |
 | 8 | Database schema mismatch between Postgres and SQLite | Low | Medium | Single SQLAlchemy model set; vector column handled conditionally (pgvector vs JSON text) |
 | 9 | Duplicate jobs in output | Medium | Low | content_hash deduplication at DB level (UNIQUE constraint); check before insert |
 | 10 | Email delivery failure | Low | Low | Non-fatal error; files always written locally; email_sent=False in RunResult |
@@ -534,60 +539,41 @@ State (TypedDict):
 
 ## 9. Implementation Order
 
-| Order | Phase | What | Rationale |
-|-------|-------|------|-----------|
-| 1 | Phase 0 | CLAUDE.md + PLAN.md | Foundation — defines everything else |
-| 2 | Phase 1 | Project scaffold + pyproject.toml | Need working project before any code |
-| 3 | Phase 2 | Core models + settings | All other code depends on these types |
-| 4 | Phase 3 | Infrastructure (DB, cache, embedder) | Agents need persistence and caching |
-| 5 | Phase 4 | Tools (PDF, ATS, browser, search) | Agents need tools to do work |
-| 6 | Phase 5.1-5.2 | Resume + Prefs parsers | Fastest to test, minimal deps |
-| 7 | Phase 5.3-5.4 | Company finder + Scraper | Hardest part, most external deps |
-| 8 | Phase 5.5-5.6 | Job processor + Scorer | Most valuable part (matching logic) |
-| 9 | Phase 5.7-5.8 | Aggregator + Notifier | Output generation + email |
-| 10 | Phase 6 | Pipeline orchestrator + CLI | Ties everything together |
-| 11 | Phase 7 | Observability | Logging, tracing, cost tracking |
-| 12 | Phase 8 | Testing + self-improvement | Validate all edge cases |
-| 13 | Phase 9 | Docker + local dev | Containerization |
-| 14 | Phase 10 | GitHub open source standards | README, CI, contributing guide |
+| Order | Phase | What | Status |
+|-------|-------|------|--------|
+| 1 | Phase 0 | CLAUDE.md + PLAN.md | DONE |
+| 2 | Phase 1 | Project scaffold + pyproject.toml | DONE |
+| 3 | Phase 2 | Core models + settings | DONE |
+| 4 | Phase 3 | Infrastructure (DB, cache, embedder) | DONE |
+| 5 | Phase 4 | Tools (PDF, ATS, browser, search) | DONE |
+| 6 | Phase 5 | All 8 agents + pipeline + CLI | DONE (includes former Phase 6) |
+| 7 | Phase 6 | Observability (logging, tracing, cost tracking) | TODO |
+| 8 | Phase 7 | Testing + self-improvement (80% coverage) | TODO |
+| 9 | Phase 8 | Docker + local dev | TODO |
+| 10 | Phase 9 | GitHub open source standards (README, CI) | TODO |
 
 ---
 
-## 10. Checkpoint/Resume Strategy
+## 10. Workflow Durability and Resume Strategy (Checkpoints)
 
-Each checkpoint file is a JSON-serialized `PipelineCheckpoint`:
+The MVP pipeline uses JSON checkpoint files for crash recovery. After each agent step completes, a `PipelineCheckpoint` is serialized to `{checkpoint_dir}/{run_id}--{step}.json`. On restart, the pipeline loads the latest checkpoint and skips completed steps.
 
-```json
-{
-  "run_id": "run_20260224_143000",
-  "completed_step": "scrape_jobs",
-  "state_snapshot": {
-    "config": { "resume_path": "...", "preferences_text": "...", ... },
-    "profile": { ... },
-    "preferences": { ... },
-    "companies": [ ... ],
-    "raw_jobs": [ ... ],
-    "normalized_jobs": [],
-    "scored_jobs": [],
-    "errors": [ ... ],
-    "total_tokens": 12500,
-    "total_cost_usd": 0.87
-  },
-  "saved_at": "2026-02-24T14:35:00Z"
-}
-```
-
-**File naming**: `{checkpoint_dir}/{run_id}_{step_name}.json`
-- e.g., `output/checkpoints/run_20260224_143000_scrape_jobs.json`
+**Durable state**:
+- `RunConfig` payload (including `run_id`) is the canonical identifier for a run.
+- Agents read/write to the DB (`profiles`, `companies`, `jobs_raw`, `jobs_normalized`, `jobs_scored`, `run_history`) using idempotent operations (e.g., checking `content_hash` or `run_id` before insert).
+- Checkpoint files store serialized `PipelineState` snapshots so the pipeline can resume from the last successful step.
 
 **Resume logic**:
-1. On pipeline start, scan `checkpoint_dir` for files matching `{run_id}_*.json`
-2. If found, load the one with the latest `saved_at`
-3. Deserialize `state_snapshot` into `PipelineState`
-4. Skip steps up to and including `completed_step`
-5. Continue from the next step
+1. A `run_id` uniquely identifies a pipeline execution and its checkpoint files.
+2. On startup, `load_latest_checkpoint(run_id, checkpoint_dir)` globs `{run_id}--*.json`, selects the most recent by mtime, and deserializes it into a `PipelineCheckpoint`.
+3. `PipelineState.from_checkpoint()` reconstructs state; `completed_steps` set causes the pipeline loop to skip already-finished steps.
+4. DB operations are idempotent via `content_hash` UNIQUE constraints, so replaying a step does not create duplicates.
 
-**What's serialized**: All Pydantic models serialize to JSON natively. `PipelineState.to_checkpoint()` converts all fields. `embedding` lists are included (they're just float arrays). `Path` objects serialize as strings.
+**RunResult mapping**:
+- When the pipeline completes, `PipelineState.build_result()` constructs a `RunResult` with aggregates (companies_attempted, jobs_scored, output_files, cost_usd, duration_seconds).
+- This `RunResult` is what the CLI displays and what tests assert against.
+
+**Future**: Temporal orchestration (Phase 2) will replace checkpoint files with durable workflow history and activity-level retries for production deployments.
 
 ---
 
@@ -603,3 +589,60 @@ Each checkpoint file is a JSON-serialized `PipelineCheckpoint`:
 - [x] The retry strategy is defined for every agent that makes network calls (tenacity in BaseAgent)
 - [x] The system works end-to-end with `--lite` flag (SQLite, local embeddings, no Docker)
 - [x] Each package can be tested independently (separate test directories, core has no external deps)
+
+---
+
+## 12. End-to-End Testing Suite
+
+The project includes both a user-guided CLI command and a pytest-based E2E test to validate the full pipeline.
+
+### 12.1 CLI E2E Command
+
+- **Command**: `job-hunter e2e-test`
+- **Behavior**:
+  - Validates that all required environment variables and configuration fields are set (Anthropic, Tavily, DB, email provider, etc.).
+  - Prints clear guidance for any missing or inconsistent configuration and exits with a non-zero status if critical settings are absent.
+  - Offers a “safe-cost” mode that:
+    - Enforces a small `company_limit` (for example, 3–5 companies).
+    - Tightens the `max_cost_per_run_usd` guardrail.
+  - Runs the `Pipeline` directly with either:
+    - A sample resume/preferences pair from `tests/fixtures/`, or
+    - User-specified resume and preferences arguments.
+  - On completion, prints a summary including:
+    - Run status and `run_id`.
+    - Companies attempted/succeeded, jobs scraped/scored.
+    - Output files written and their paths.
+    - Whether an email was sent.
+
+### 12.2 Pytest E2E Test
+
+- **File**: `tests/e2e/test_full_pipeline.py`
+- **Markers and gating**:
+  - Uses a custom marker (`@pytest.mark.e2e`) and is skipped by default unless `E2E_ENABLED=1` is set in the environment.
+  - Fails fast with a helpful message if critical environment variables or services (DB, API keys) are not available.
+- **Behavior**:
+  - Instantiates the `Pipeline` class with test `Settings` and `RunConfig`.
+  - Runs `pipeline.run(config)` with test fixtures (resume PDF + preferences text) using `--dry-run`.
+  - Asserts:
+    - A new `run_history` row exists with `status=”success”` for the test `run_id`.
+    - The `profiles`, `companies`, `jobs_normalized`, and `jobs_scored` tables have records associated with the `run_id`.
+    - At least one output file was generated in the configured `output_dir`.
+    - No fatal errors were recorded in the `errors` field of the `RunResult`.
+
+### 12.3 Environment and Configuration Requirements for E2E
+
+- **Database**:
+  - `JH_DB_BACKEND` and `JH_DATABASE_URL` (or `JH_POSTGRES_URL` when using Postgres) must be set and reachable. SQLite works for basic E2E.
+- **Cache**:
+  - `JH_REDIS_URL` for Redis-backed caching, or `JH_CACHE_BACKEND=db` for DB-backed fallback.
+- **LLM & Search**:
+  - `JH_ANTHROPIC_API_KEY` and `JH_TAVILY_API_KEY`.
+- **Email**:
+  - Either `JH_SENDGRID_API_KEY` (for SendGrid) or SMTP credentials (`JH_SMTP_HOST`, `JH_SMTP_PORT`, `JH_SMTP_USER`, `JH_SMTP_PASSWORD`) depending on `email_provider`.
+- **Optional**:
+  - `JH_VOYAGE_API_KEY` for Voyage embeddings.
+  - `JH_LANGSMITH_API_KEY` for tracing.
+
+Settings validation in `tests/unit/core/test_settings.py` is extended to ensure that:
+- Required fields for the selected providers (e.g., Redis, Voyage, SendGrid) are present.
+- E2E tests clearly indicate which configuration is missing rather than failing with generic errors.

@@ -42,3 +42,8 @@ htmlcov/
 
 # Alembic
 alembic/versions/__pycache__/
+
+# Personal / scratch
+PROMPT.md
+global.claude.md
+test.py

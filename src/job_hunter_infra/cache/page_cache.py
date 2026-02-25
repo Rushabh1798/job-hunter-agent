@@ -4,14 +4,14 @@ from __future__ import annotations
 
 import hashlib
 
-from job_hunter_infra.cache.disk_cache import DiskCacheClient
+from job_hunter_core.interfaces.cache import CacheClient
 
 
 class PageCache:
     """Cache for scraped page content, keyed by URL hash."""
 
-    def __init__(self, cache: DiskCacheClient) -> None:
-        """Initialize with a DiskCacheClient."""
+    def __init__(self, cache: CacheClient) -> None:
+        """Initialize with a CacheClient implementation."""
         self._cache = cache
 
     def _key(self, url: str) -> str:

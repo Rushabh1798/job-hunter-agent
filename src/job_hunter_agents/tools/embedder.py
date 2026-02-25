@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, Any
 import structlog
 
 if TYPE_CHECKING:
-    from job_hunter_infra.cache.disk_cache import DiskCacheClient
+    from job_hunter_core.interfaces.cache import CacheClient
 
 logger = structlog.get_logger()
 
@@ -83,7 +83,7 @@ class CachedEmbedder:
     def __init__(
         self,
         embedder: LocalEmbedder | VoyageEmbedder,
-        cache: DiskCacheClient,
+        cache: CacheClient,
     ) -> None:
         """Initialize with an embedder and cache client."""
         self._embedder = embedder

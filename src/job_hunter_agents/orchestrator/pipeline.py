@@ -71,7 +71,10 @@ class Pipeline:
                         continue
 
                     result = await self._run_agent_step(
-                        step_name, agent_cls, state, start,
+                        step_name,
+                        agent_cls,
+                        state,
+                        start,
                     )
                     if isinstance(result, RunResult):
                         return result
@@ -171,7 +174,8 @@ class Pipeline:
         root_span.set_attribute("pipeline.status", status)  # type: ignore[attr-defined]
         root_span.set_attribute("pipeline.total_tokens", state.total_tokens)  # type: ignore[attr-defined]
         root_span.set_attribute(  # type: ignore[attr-defined]
-            "pipeline.total_cost_usd", round(state.total_cost_usd, 4),
+            "pipeline.total_cost_usd",
+            round(state.total_cost_usd, 4),
         )
         root_span.set_attribute("pipeline.jobs_scored", len(state.scored_jobs))  # type: ignore[attr-defined]
         root_span.set_attribute("pipeline.errors", len(state.errors))  # type: ignore[attr-defined]

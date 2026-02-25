@@ -83,7 +83,5 @@ class TestCLIDryRun:
                 "JH_TAVILY_API_KEY": "fake-key",
             },
         )
-        assert result.exit_code in (0, 1), (
-            f"Lite mode failed: {result.output}"
-        )
+        assert result.exit_code in (0, 1), f"Lite mode failed: {result.output}"
         assert "Starting run:" in result.output

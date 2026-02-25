@@ -78,9 +78,7 @@ async def db_engine() -> AsyncGenerator[AsyncEngine, None]:
             )
         )
         if not result.fetchone():
-            await conn.execute(
-                __import__("sqlalchemy").text("CREATE DATABASE jobhunter_test")
-            )
+            await conn.execute(__import__("sqlalchemy").text("CREATE DATABASE jobhunter_test"))
     await admin_engine.dispose()
 
     # Create tables

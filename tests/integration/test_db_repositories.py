@@ -217,9 +217,7 @@ class TestJobRepository:
         with pytest.raises(IntegrityError):
             await db_session.flush()
 
-    async def test_unique_content_hash_on_normalized_job(
-        self, db_session: AsyncSession
-    ) -> None:
+    async def test_unique_content_hash_on_normalized_job(self, db_session: AsyncSession) -> None:
         """Duplicate content_hash on normalized jobs raises IntegrityError."""
         from sqlalchemy.exc import IntegrityError
 

@@ -93,9 +93,7 @@ class TestPipelineTracing:
             "agent.find_companies",
         ]
         for prefix in expected_prefixes:
-            assert any(
-                name == prefix for name in span_names
-            ), f"Missing span: {prefix}"
+            assert any(name == prefix for name in span_names), f"Missing span: {prefix}"
 
     async def test_root_span_has_summary_attributes(
         self,

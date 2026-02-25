@@ -25,9 +25,7 @@ class FakeWebSearchTool:
         """Accept api_key to match real constructor signature."""
         self._api_key = api_key
 
-    async def search(
-        self, query: str, max_results: int = 5
-    ) -> list[_FakeSearchResult]:
+    async def search(self, query: str, max_results: int = 5) -> list[_FakeSearchResult]:
         """Return fixture search results."""
         fixture = FIXTURES_DIR / "search_results" / "career_page_search.json"
         data = json.loads(fixture.read_text())

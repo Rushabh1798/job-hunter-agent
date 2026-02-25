@@ -42,9 +42,7 @@ def _make_settings(tmp_path: Path) -> MagicMock:
 class TestPipelineDryRun:
     """Full pipeline run with mocked externals, real state management."""
 
-    async def test_full_pipeline_success(
-        self, dry_run_patches: ExitStack, tmp_path: Path
-    ) -> None:
+    async def test_full_pipeline_success(self, dry_run_patches: ExitStack, tmp_path: Path) -> None:
         """All 8 agents run, status is success, scored_jobs > 0."""
         settings = _make_settings(tmp_path)
         config = RunConfig(
@@ -119,9 +117,7 @@ class TestPipelineDryRun:
         assert checkpoint is not None
         assert checkpoint.run_id == "checkpoint-test-run"
 
-    async def test_pipeline_cost_tracking(
-        self, dry_run_patches: ExitStack, tmp_path: Path
-    ) -> None:
+    async def test_pipeline_cost_tracking(self, dry_run_patches: ExitStack, tmp_path: Path) -> None:
         """Dry-run still tracks token usage and cost from fixture metadata."""
         settings = _make_settings(tmp_path)
         config = RunConfig(
@@ -137,9 +133,7 @@ class TestPipelineDryRun:
         assert result.total_tokens_used > 0, "Expected token tracking in dry-run"
         assert result.estimated_cost_usd > 0, "Expected cost tracking in dry-run"
 
-    async def test_pipeline_company_limit(
-        self, dry_run_patches: ExitStack, tmp_path: Path
-    ) -> None:
+    async def test_pipeline_company_limit(self, dry_run_patches: ExitStack, tmp_path: Path) -> None:
         """company_limit caps the number of companies processed."""
         settings = _make_settings(tmp_path)
         config = RunConfig(

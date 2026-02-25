@@ -76,6 +76,23 @@ make docker-run-lite ARGS='--prefs "..."' # run lite in Docker
 - Conventional Commits: `feat:`, `fix:`, `test:`, `refactor:`, `docs:`
 - Test files mirror source: `agents/scorer.py` -> `tests/unit/agents/test_scorer.py`
 
+## Spec Files (Context Switching)
+Detailed component specs live in `docs/specs/`. Load only the spec(s) you need for the current task instead of reading source code. See `docs/SPEC_INDEX.md` for the task-to-spec mapping.
+
+| Spec | Scope |
+|------|-------|
+| SPEC_01 | Core models, config, interfaces, state, constants, exceptions |
+| SPEC_02 | ORM models, engine/session, 5 repositories |
+| SPEC_03 | Redis + DB cache, company/page caches, vector similarity |
+| SPEC_04 | BaseAgent, Pipeline, checkpoint, dryrun |
+| SPEC_05 | ResumeParser + PrefsParser agents + prompts |
+| SPEC_06 | CompanyFinder + JobsScraper agents + prompts |
+| SPEC_07 | PDF parser, web scraper, web search, embedder, email sender |
+| SPEC_08 | ATS clients (Greenhouse, Lever, Ashby, Workday) |
+| SPEC_09 | JobProcessor + JobsScorer + Aggregator + Notifier + prompts |
+| SPEC_10 | Logging, tracing, cost tracking |
+| SPEC_11 | CLI, Makefile, Docker, CI, test mocks/fixtures |
+
 ## Known Issues / TODOs
 - Phases 0-10 complete (core, infra, tools, agents, pipeline, CLI, observability, testing, Docker, open source standards, integration & E2E testing)
 - Temporal orchestration deferred to Phase 2 (post-MVP)
@@ -106,6 +123,7 @@ make test-live                 # run live tests only
 - Coverage target: 80%
 
 ## Recent Changes
+- Phase 11: Component spec files — 11 spec files in `docs/specs/` + `docs/SPEC_INDEX.md` for AI context switching. Each spec documents public API, data flow, dependencies, configuration, error handling, testing, and modification patterns.
 - Phase 10b: OTEL tracing wiring — pipeline produces root span + per-agent child spans with cost/error attributes, `get_tracer()` / `configure_tracing_with_exporter()` / `disable_tracing()` helpers, `--trace` CLI flag for OTLP, Jaeger in docker-compose (trace profile), `make dev-trace` / `make run-trace`, InMemorySpanExporter integration tests, 4 new unit tests for tracing helpers
 - Phase 10: Integration & E2E testing — fixture data (sample_resume.pdf, LLM/ATS/search/HTML fixtures), named fake tools (mock_tools.py), FakeLLMDispatcher (mock_llm.py), dry-run module (dryrun.py), CLI --dry-run mocks all externals, integration tests (DB repos, Redis cache, pipeline dry-run, checkpoint persistence, CLI dry-run), live E2E tests with cost guardrails, Makefile targets (test-e2e, test-live), e2e pytest marker
 - Phase 9: Open source standards — README.md, GitHub Actions CI (lint/test/docker jobs), .pre-commit-config.yaml (ruff + pre-commit-hooks), CONTRIBUTING.md (setup, workflow, architecture rules, ATS/agent checklists), SECURITY.md, issue templates (bug report, ATS support request), CHANGELOG.md updated

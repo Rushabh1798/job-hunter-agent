@@ -20,7 +20,7 @@ def _make_settings(**overrides: object) -> object:
     """Create a minimal mock settings object."""
     from types import SimpleNamespace
 
-    defaults = {"log_format": "console", "log_level": "INFO"}
+    defaults: dict[str, object] = {"log_format": "console", "log_level": "INFO"}
     defaults.update(overrides)
     return SimpleNamespace(**defaults)
 

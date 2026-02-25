@@ -110,8 +110,10 @@ class TestCostTracker:
         assert summary["total_calls"] == 2
         assert summary["total_tokens"] == 4500
         assert isinstance(summary["cost_by_model"], dict)
-        assert len(summary["cost_by_model"]) == 2  # type: ignore[arg-type]
-        assert summary["total_cost_usd"] > 0
+        assert len(summary["cost_by_model"]) == 2
+        total_cost = summary["total_cost_usd"]
+        assert isinstance(total_cost, float)
+        assert total_cost > 0
 
 
 @pytest.mark.unit

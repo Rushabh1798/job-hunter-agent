@@ -2,15 +2,13 @@
 
 from __future__ import annotations
 
-from typing import Any
-
 from redis.asyncio import Redis
 
 
 class RedisCacheClient:
     """Persistent cache backed by Redis."""
 
-    def __init__(self, redis: Redis[Any]) -> None:
+    def __init__(self, redis: Redis) -> None:  # type: ignore[type-arg]
         """Initialize with a redis-py asyncio client."""
         self._redis = redis
 

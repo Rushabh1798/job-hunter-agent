@@ -86,6 +86,7 @@ known-first-party = ["job_hunter_core", "job_hunter_agents", "job_hunter_infra",
 [tool.mypy]
 python_version = "3.12"
 strict = true
+warn_unused_ignores = false
 plugins = ["pydantic.mypy"]
 
 [[tool.mypy.overrides]]

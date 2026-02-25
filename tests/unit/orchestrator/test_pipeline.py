@@ -58,12 +58,12 @@ MOCK_STEPS = [
 
 def _enter_pipeline_patches(
     stack: ExitStack,
-    steps: list | None = None,
+    steps: list[tuple[str, type[object]]] | None = None,
     checkpoint_return: object = None,
 ) -> dict[str, MagicMock]:
     """Enter all pipeline patches via an ExitStack. Returns named mocks."""
     mocks: dict[str, MagicMock] = {}
-    mocks["steps"] = stack.enter_context(
+    mocks["steps"] = stack.enter_context(  # type: ignore[assignment]
         patch(
             "job_hunter_agents.orchestrator.pipeline.PIPELINE_STEPS",
             steps or MOCK_STEPS,
@@ -93,7 +93,7 @@ def _enter_pipeline_patches(
     return mocks
 
 
-def _make_error_steps(exc: Exception) -> list:
+def _make_error_steps(exc: Exception) -> list[tuple[str, type[object]]]:
     """Create a single-step pipeline that raises the given exception."""
     return [
         (

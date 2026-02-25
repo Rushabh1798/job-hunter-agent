@@ -59,11 +59,11 @@ class TestPipelineStateCheckpoint:
         snap = cp.state_snapshot
         assert snap["profile"] is not None
         assert snap["preferences"] is not None
-        assert len(snap["companies"]) == 1
-        assert len(snap["raw_jobs"]) == 1
-        assert len(snap["normalized_jobs"]) == 1
-        assert len(snap["scored_jobs"]) == 1
-        assert len(snap["errors"]) == 1
+        assert len(snap["companies"]) == 1  # type: ignore[arg-type]
+        assert len(snap["raw_jobs"]) == 1  # type: ignore[arg-type]
+        assert len(snap["normalized_jobs"]) == 1  # type: ignore[arg-type]
+        assert len(snap["scored_jobs"]) == 1  # type: ignore[arg-type]
+        assert len(snap["errors"]) == 1  # type: ignore[arg-type]
         assert snap["total_tokens"] == 1000
         assert snap["total_cost_usd"] == 0.05
 
@@ -164,7 +164,11 @@ class TestPipelineStateCheckpoint:
         restored = PipelineState.from_checkpoint(cp)
 
         assert restored.config.run_id == original.config.run_id
+        assert restored.profile is not None
+        assert original.profile is not None
         assert restored.profile.name == original.profile.name
+        assert restored.preferences is not None
+        assert original.preferences is not None
         assert restored.preferences.raw_text == original.preferences.raw_text
         assert len(restored.companies) == len(original.companies)
         assert len(restored.raw_jobs) == len(original.raw_jobs)

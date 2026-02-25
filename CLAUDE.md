@@ -6,7 +6,7 @@ Monorepo for an autonomous multi-agent job discovery system. Accepts a resume PD
 ## Architecture
 - **Monorepo** with four packages under `src/`: `job_hunter_core`, `job_hunter_agents`, `job_hunter_infra`, `job_hunter_cli`
 - **AD-1**: PostgreSQL + pgvector for relational + vector storage (no standalone vector DB)
-- **AD-2**: Async pipeline with JSON checkpoint files for crash recovery (MVP); Temporal planned for Phase 2
+- **AD-2**: Dual orchestration: checkpoint-based pipeline (default) or Temporal workflows (`--temporal`); automatic fallback to checkpoints if Temporal is unavailable
 - **AD-3**: Redis for persistent caching (default), DB-backed cache fallback for `--lite` mode. diskcache removed.
 - **AD-4**: Local sentence-transformers embeddings by default; Voyage API optional
 - **AD-5**: `--lite` mode uses SQLite + local embeddings, zero Docker dependencies
@@ -16,6 +16,7 @@ Monorepo for an autonomous multi-agent job discovery system. Accepts a resume PD
 - **6 layers**: Entry/CLI -> Orchestrator -> Parsing -> Company Discovery -> Scraping -> Matching/Output
 - LangGraph used only inside CompanyFinderAgent and JobsScorerAgent for multi-step LLM reasoning
 - Top-level pipeline is a simple async sequential pipeline, NOT LangGraph
+- Temporal workflow available for durable execution with per-company parallel scraping
 
 ## Build & Run
 ```bash
@@ -26,10 +27,13 @@ make lint                                # ruff + mypy
 make run ARGS='resume.pdf --prefs "..."' # run with postgres + redis
 make run-trace ARGS='resume.pdf --prefs "..."' # run with OTLP tracing (Jaeger)
 make run-lite ARGS='resume.pdf --prefs "..." --dry-run'  # SQLite, no Docker
+make run-temporal ARGS='resume.pdf --prefs "..."'  # run via Temporal workflow
+make worker QUEUE=default                # start Temporal worker
 
 # Docker
 make dev                                 # start postgres + redis
 make dev-trace                           # start postgres + redis + Jaeger
+make dev-temporal                        # start postgres + redis + Temporal + UI
 make dev-down                            # stop infra
 make docker-build                        # build image
 make docker-run ARGS='--prefs "..."'     # run in full Docker (resume in data/)
@@ -47,6 +51,10 @@ make docker-run-lite ARGS='--prefs "..."' # run lite in Docker
 - `src/job_hunter_infra/cache/` — Redis + DB-backed cache implementations
 - `src/job_hunter_agents/orchestrator/pipeline.py` — Sequential async pipeline with checkpoints
 - `src/job_hunter_agents/orchestrator/checkpoint.py` — Checkpoint serialization/deserialization
+- `src/job_hunter_agents/orchestrator/temporal_workflow.py` — Temporal workflow definition
+- `src/job_hunter_agents/orchestrator/temporal_activities.py` — Temporal activity wrappers
+- `src/job_hunter_agents/orchestrator/temporal_orchestrator.py` — Temporal orchestrator with fallback
+- `src/job_hunter_agents/orchestrator/temporal_client.py` — Temporal client factory (mTLS, API key)
 - `src/job_hunter_cli/main.py` — typer CLI entrypoint
 
 ## Dependencies
@@ -60,6 +68,7 @@ make docker-run-lite ARGS='--prefs "..."' # run lite in Docker
 - **Cache**: redis (default), DB-backed (fallback for --lite)
 - **Email**: SendGrid or SMTP via aiosmtplib
 - **CLI**: typer + rich
+- **Orchestration**: Temporal (optional, for durable workflows)
 - **Observability**: structlog, OpenTelemetry (Jaeger), LangSmith (optional), tenacity
 
 ## Conventions
@@ -94,8 +103,8 @@ Detailed component specs live in `docs/specs/`. Load only the spec(s) you need f
 | SPEC_11 | CLI, Makefile, Docker, CI, test mocks/fixtures |
 
 ## Known Issues / TODOs
-- Phases 0-10 complete (core, infra, tools, agents, pipeline, CLI, observability, testing, Docker, open source standards, integration & E2E testing)
-- Temporal orchestration deferred to Phase 2 (post-MVP)
+- Phases 0-12 complete (core, infra, tools, agents, pipeline, CLI, observability, testing, Docker, open source standards, integration & E2E testing, Temporal orchestration)
+- Terraform IaC and Kubernetes manifests deferred to Phase 13
 - Web UI deferred to future
 
 ## Inter-Repo Dependencies
@@ -123,6 +132,7 @@ make test-live                 # run live tests only
 - Coverage target: 80%
 
 ## Recent Changes
+- Phase 12: Temporal orchestration — Temporal workflow/activities wrapping existing agents, per-company parallel scraping, TemporalOrchestrator with automatic checkpoint fallback, Temporal client factory (plain TCP/mTLS/API key auth), worker CLI command (`job-hunter worker --queue`), docker-compose Temporal service + UI, `make dev-temporal` / `make run-temporal` / `make worker`, unit tests (client, workflow, orchestrator, activities), integration tests (connection + fallback), `--temporal` CLI flag, updated CLAUDE.md + .env.example
 - Phase 11: Component spec files — 11 spec files in `docs/specs/` + `docs/SPEC_INDEX.md` for AI context switching. Each spec documents public API, data flow, dependencies, configuration, error handling, testing, and modification patterns.
 - Phase 10b: OTEL tracing wiring — pipeline produces root span + per-agent child spans with cost/error attributes, `get_tracer()` / `configure_tracing_with_exporter()` / `disable_tracing()` helpers, `--trace` CLI flag for OTLP, Jaeger in docker-compose (trace profile), `make dev-trace` / `make run-trace`, InMemorySpanExporter integration tests, 4 new unit tests for tracing helpers
 - Phase 10: Integration & E2E testing — fixture data (sample_resume.pdf, LLM/ATS/search/HTML fixtures), named fake tools (mock_tools.py), FakeLLMDispatcher (mock_llm.py), dry-run module (dryrun.py), CLI --dry-run mocks all externals, integration tests (DB repos, Redis cache, pipeline dry-run, checkpoint persistence, CLI dry-run), live E2E tests with cost guardrails, Makefile targets (test-e2e, test-live), e2e pytest marker

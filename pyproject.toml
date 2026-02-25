@@ -49,6 +49,8 @@ dependencies = [
     "opentelemetry-api>=1.20",
     "opentelemetry-sdk>=1.20",
     "opentelemetry-exporter-otlp>=1.20",
+    # Workflow orchestration
+    "temporalio>=1.7,<2.0",
     # Scheduling
     "apscheduler>=3.10",
     # HTTP client
@@ -119,6 +121,8 @@ module = [
     "instructor.*",
     "opentelemetry",
     "opentelemetry.*",
+    "temporalio",
+    "temporalio.*",
 ]
 ignore_missing_imports = true
 follow_imports = "skip"

@@ -45,3 +45,7 @@ class EmailDeliveryError(JobHunterError):
 
 class CheckpointError(JobHunterError):
     """Raised when checkpoint save/load fails."""
+
+
+class TemporalConnectionError(JobHunterError):
+    """Raised when Temporal server is unreachable or connection fails."""

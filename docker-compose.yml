@@ -46,6 +46,34 @@ services:
     profiles:
       - full
 
+  temporal:
+    image: temporalio/auto-setup:latest
+    environment:
+      - DB=sqlite
+    ports:
+      - "7233:7233"
+    healthcheck:
+      test: ["CMD", "temporal", "operator", "cluster", "health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    profiles:
+      - temporal
+      - full
+
+  temporal-ui:
+    image: temporalio/ui:latest
+    environment:
+      - TEMPORAL_ADDRESS=temporal:7233
+    ports:
+      - "8233:8080"
+    depends_on:
+      temporal:
+        condition: service_healthy
+    profiles:
+      - temporal
+
   jaeger:
     image: jaegertracing/all-in-one:latest
     environment:

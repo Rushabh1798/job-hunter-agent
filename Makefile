@@ -1,8 +1,10 @@
 .DEFAULT_GOAL := help
 
 ARGS ?=
+QUEUE ?= default
 
-.PHONY: help install dev dev-down dev-trace test test-int test-all lint format run run-lite run-trace \
+.PHONY: help install dev dev-down dev-trace dev-temporal test test-int test-all lint format \
+        run run-lite run-trace run-temporal worker \
         docker-build docker-run docker-run-lite clean clean-docker
 
 help: ## Show this help message
@@ -27,8 +29,16 @@ dev-trace: ## Start postgres + redis + Jaeger for trace visualization
 	@until docker compose exec -T redis redis-cli ping > /dev/null 2>&1; do sleep 1; done
 	@echo "Infrastructure + Jaeger ready (UI: http://localhost:16686)"
 
+dev-temporal: ## Start postgres + redis + Temporal dev server + UI
+	docker compose --profile temporal up -d --wait
+	@echo "Waiting for postgres..."
+	@until docker compose exec -T postgres pg_isready -U postgres -d jobhunter > /dev/null 2>&1; do sleep 1; done
+	@echo "Waiting for redis..."
+	@until docker compose exec -T redis redis-cli ping > /dev/null 2>&1; do sleep 1; done
+	@echo "Infrastructure + Temporal ready (gRPC: localhost:7233, UI: http://localhost:8233)"
+
 dev-down: ## Stop infrastructure services
-	docker compose down
+	docker compose --profile temporal --profile trace --profile full down
 
 test: ## Run unit tests
 	uv run pytest -m unit
@@ -57,6 +67,12 @@ run: ## Run CLI (pass args via ARGS="...")
 
 run-trace: ## Run CLI with OTLP tracing enabled (requires make dev-trace)
 	uv run job-hunter run --trace $(ARGS)
+
+run-temporal: ## Run CLI with Temporal orchestrator (requires make dev-temporal)
+	uv run job-hunter run --temporal $(ARGS)
+
+worker: ## Start Temporal worker (QUEUE=default|llm|scraping)
+	uv run job-hunter worker --queue $(QUEUE)
 
 run-lite: ## Run CLI in lite mode (SQLite, no Docker)
 	JH_DB_BACKEND=sqlite JH_CACHE_BACKEND=db uv run job-hunter run --lite $(ARGS)

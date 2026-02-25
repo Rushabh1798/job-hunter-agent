@@ -38,6 +38,7 @@ def _tcp_reachable(host: str, port: int, timeout: float = 1.0, retries: int = 5)
 
 _pg_up = _tcp_reachable("localhost", 5432)
 _redis_up = _tcp_reachable("localhost", 6379)
+_temporal_up = _tcp_reachable("localhost", 7233)
 
 skip_no_postgres = pytest.mark.skipif(
     not _pg_up,
@@ -46,6 +47,10 @@ skip_no_postgres = pytest.mark.skipif(
 skip_no_redis = pytest.mark.skipif(
     not _redis_up,
     reason="Redis not reachable on localhost:6379 — run `make dev` first",
+)
+skip_no_temporal = pytest.mark.skipif(
+    not _temporal_up,
+    reason="Temporal not reachable on localhost:7233 — run `make dev-temporal` first",
 )
 
 
@@ -167,3 +172,20 @@ def dry_run_patches() -> Generator[ExitStack, None, None]:
     stack = activate_dry_run_patches()
     yield stack
     stack.close()
+
+
+# ---------------------------------------------------------------------------
+# Temporal fixtures
+# ---------------------------------------------------------------------------
+
+
+@pytest_asyncio.fixture
+async def temporal_client() -> AsyncGenerator[object, None]:
+    """Connect to local Temporal dev server for integration tests."""
+    if not _temporal_up:
+        pytest.skip("Temporal not available")
+
+    from temporalio.client import Client
+
+    client = await Client.connect("localhost:7233")
+    yield client

@@ -194,6 +194,48 @@ class Settings(BaseSettings):
         description="Directory for checkpoint files",
     )
 
+    # --- Temporal ---
+    orchestrator: Literal["checkpoint", "temporal"] = Field(
+        default="checkpoint",
+        description="Pipeline orchestrator: 'checkpoint' (default) or 'temporal'",
+    )
+    temporal_address: str = Field(
+        default="localhost:7233",
+        description="Temporal server gRPC address (host:port)",
+    )
+    temporal_namespace: str = Field(
+        default="default",
+        description="Temporal namespace",
+    )
+    temporal_task_queue: str = Field(
+        default="job-hunter-default",
+        description="Default Temporal task queue",
+    )
+    temporal_llm_task_queue: str = Field(
+        default="job-hunter-llm",
+        description="Task queue for LLM-heavy activities",
+    )
+    temporal_scraping_task_queue: str = Field(
+        default="job-hunter-scraping",
+        description="Task queue for scraping activities",
+    )
+    temporal_tls_cert_path: str | None = Field(
+        default=None,
+        description="Path to TLS client cert for Temporal Cloud (mTLS)",
+    )
+    temporal_tls_key_path: str | None = Field(
+        default=None,
+        description="Path to TLS client key for Temporal Cloud (mTLS)",
+    )
+    temporal_api_key: SecretStr | None = Field(
+        default=None,
+        description="API key for Temporal Cloud authentication",
+    )
+    temporal_workflow_timeout_seconds: int = Field(
+        default=1800,
+        description="Total workflow execution timeout in seconds",
+    )
+
     # --- Agent Execution ---
     agent_timeout_seconds: int = Field(
         default=300,
@@ -223,6 +265,18 @@ class Settings(BaseSettings):
         if self.cache_backend == "redis" and not self.redis_url:
             msg = "redis_url required when cache_backend=redis"
             raise ValueError(msg)
+        return self
+
+    @model_validator(mode="after")
+    def validate_temporal_config(self) -> Settings:
+        """Validate Temporal configuration when orchestrator=temporal."""
+        if self.orchestrator == "temporal":
+            if self.temporal_tls_cert_path and not Path(self.temporal_tls_cert_path).exists():
+                msg = f"temporal_tls_cert_path not found: {self.temporal_tls_cert_path}"
+                raise ValueError(msg)
+            if self.temporal_tls_key_path and not Path(self.temporal_tls_key_path).exists():
+                msg = f"temporal_tls_key_path not found: {self.temporal_tls_key_path}"
+                raise ValueError(msg)
         return self
 
     @model_validator(mode="after")

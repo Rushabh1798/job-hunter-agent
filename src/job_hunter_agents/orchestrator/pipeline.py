@@ -110,6 +110,7 @@ class Pipeline:
             span = tracer.start_span(f"agent.{step_name}")
             span.set_attribute("agent.name", step_name)
 
+        agent: BaseAgent | None = None
         try:
             agent = agent_cls(self.settings)
             state = await asyncio.wait_for(
@@ -159,6 +160,8 @@ class Pipeline:
             return state.build_result(status="failed", duration_seconds=duration)
 
         finally:
+            if agent is not None:
+                await agent.close()
             if span is not None:
                 span.end()
 

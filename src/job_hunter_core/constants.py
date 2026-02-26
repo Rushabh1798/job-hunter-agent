@@ -9,12 +9,6 @@ COMPANY_FINDER_PROMPT_VERSION = "v1"
 JOB_PROCESSOR_PROMPT_VERSION = "v1"
 JOB_SCORER_PROMPT_VERSION = "v1"
 
-# LLM token pricing (USD per 1M tokens)
-TOKEN_PRICES: dict[str, dict[str, float]] = {
-    "claude-haiku-4-5-20251001": {"input": 0.80, "output": 4.00},
-    "claude-sonnet-4-5-20250514": {"input": 3.00, "output": 15.00},
-}
-
 # Common career page paths to try when no ATS is detected
 COMMON_CAREER_PATHS = [
     "/careers",

@@ -3,7 +3,6 @@
 from job_hunter_agents.observability.cost_tracker import (
     CostTracker,
     LLMCallMetrics,
-    extract_token_usage,
 )
 from job_hunter_agents.observability.logging import (
     bind_run_context,
@@ -34,7 +33,6 @@ __all__ = [
     "configure_tracing",
     "configure_tracing_with_exporter",
     "disable_tracing",
-    "extract_token_usage",
     "format_run_report",
     "generate_run_report",
     "get_tracer",

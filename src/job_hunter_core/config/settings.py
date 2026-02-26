@@ -15,8 +15,13 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="JH_", env_file=".env")
 
     # --- LLM ---
-    anthropic_api_key: SecretStr = Field(
-        description="Anthropic API key for Claude models",
+    llm_provider: str = Field(
+        default="anthropic",
+        description="LLM provider: 'anthropic', 'local_claude', or 'fake'",
+    )
+    anthropic_api_key: SecretStr | None = Field(
+        default=None,
+        description="Anthropic API key for Claude models (required when llm_provider=anthropic)",
     )
     haiku_model: str = Field(
         default="claude-haiku-4-5-20251001",
@@ -259,6 +264,14 @@ class Settings(BaseSettings):
         default=2.0,
         description="Log warning at this cost threshold (USD)",
     )
+
+    @model_validator(mode="after")
+    def validate_llm_config(self) -> Settings:
+        """Require anthropic_api_key only when llm_provider is 'anthropic'."""
+        if self.llm_provider == "anthropic" and not self.anthropic_api_key:
+            msg = "anthropic_api_key required when llm_provider=anthropic"
+            raise ValueError(msg)
+        return self
 
     @model_validator(mode="after")
     def validate_db_config(self) -> Settings:

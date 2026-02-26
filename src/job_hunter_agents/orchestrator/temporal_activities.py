@@ -76,7 +76,10 @@ async def _run_agent_step(
 
     agent_cls = AGENT_MAP[agent_cls_name]
     agent = agent_cls(settings)
-    state = await agent.run(state)
+    try:
+        state = await agent.run(state)
+    finally:
+        await agent.close()
 
     snapshot = _state_to_snapshot(state, step_name)
     return StepResult(
@@ -143,7 +146,10 @@ async def scrape_company_activity(payload: ScrapeCompanyInput) -> ScrapeCompanyR
     from job_hunter_agents.agents.jobs_scraper import JobsScraperAgent
 
     agent = JobsScraperAgent(settings)
-    state = await agent.run(state)
+    try:
+        state = await agent.run(state)
+    finally:
+        await agent.close()
 
     raw_jobs_dicts = [json.loads(j.model_dump_json()) for j in state.raw_jobs]
     error_dicts = [json.loads(e.model_dump_json()) for e in state.errors]

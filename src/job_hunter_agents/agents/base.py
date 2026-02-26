@@ -6,15 +6,12 @@ import time
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, TypeVar
 
-import instructor
 import structlog
-from anthropic import AsyncAnthropic
+from llm_gateway import GatewayConfig, LLMClient  # type: ignore[import-untyped]
+from llm_gateway.types import TokenUsage  # type: ignore[import-untyped]
 from pydantic import BaseModel
-from tenacity import retry, stop_after_attempt, wait_exponential
 
 from job_hunter_agents.observability import get_tracer
-from job_hunter_agents.observability.cost_tracker import extract_token_usage
-from job_hunter_core.constants import TOKEN_PRICES
 from job_hunter_core.exceptions import CostLimitExceededError
 from job_hunter_core.models.run import AgentError
 from job_hunter_core.state import PipelineState
@@ -32,11 +29,30 @@ class BaseAgent(ABC):
 
     agent_name: str = "base"
 
-    def __init__(self, settings: Settings) -> None:
-        """Initialize with settings."""
+    def __init__(self, settings: Settings, llm_client: LLMClient | None = None) -> None:
+        """Initialize with settings and optional pre-built LLM client."""
         self.settings = settings
-        self._client = AsyncAnthropic(api_key=settings.anthropic_api_key.get_secret_value())
-        self._instructor = instructor.from_anthropic(self._client)
+        self._llm_client: LLMClient = llm_client or self._build_llm_client()
+
+    def _build_llm_client(self) -> LLMClient:
+        """Build LLM client from settings. Patch target for dry-run."""
+        api_key = (
+            self.settings.anthropic_api_key.get_secret_value()
+            if self.settings.anthropic_api_key
+            else None
+        )
+        config = GatewayConfig(
+            provider=self.settings.llm_provider,
+            api_key=api_key,
+            max_retries=3,
+            timeout_seconds=self.settings.agent_timeout_seconds,
+            cost_limit_usd=None,
+            cost_warn_usd=None,
+            trace_enabled=False,
+            log_level=self.settings.log_level,
+            log_format=self.settings.log_format,
+        )
+        return LLMClient(config=config)
 
     @abstractmethod
     async def run(self, state: PipelineState) -> PipelineState:
@@ -68,41 +84,32 @@ class BaseAgent(ABC):
         max_retries: int = 3,
         state: PipelineState | None = None,
     ) -> T:
-        """Call LLM with structured output via instructor.
+        """Call LLM with structured output via llm-gateway.
 
+        Retries are handled internally by the gateway provider.
         Tracks token usage and cost if state is provided.
         """
-
-        @retry(
-            stop=stop_after_attempt(max_retries),
-            wait=wait_exponential(multiplier=1, min=1, max=10),
-            reraise=True,
-        )
-        async def _do_call() -> T:
-            response: T = await self._instructor.messages.create(
-                model=model,
-                max_tokens=4096,
-                messages=messages,
-                response_model=response_model,
-            )
-            return response
-
         tracer = get_tracer()
         span = tracer.start_span(f"llm.{self.agent_name}") if tracer else None
 
         start = time.monotonic()
-        result = await _do_call()
+        response = await self._llm_client.complete(
+            messages=messages,
+            response_model=response_model,
+            model=model,
+            max_tokens=4096,
+        )
         elapsed = time.monotonic() - start
 
-        input_tokens, output_tokens = extract_token_usage(result)
+        usage = response.usage
 
         if state is not None:
-            self._track_cost(state, input_tokens, output_tokens, model)
+            self._track_cost(state, usage)
 
         if span is not None:
             span.set_attribute("llm.model", model)
-            span.set_attribute("llm.input_tokens", input_tokens)
-            span.set_attribute("llm.output_tokens", output_tokens)
+            span.set_attribute("llm.input_tokens", usage.input_tokens)
+            span.set_attribute("llm.output_tokens", usage.output_tokens)
             span.set_attribute("llm.duration_seconds", round(elapsed, 3))
             span.set_attribute("llm.agent", self.agent_name)
             span.end()
@@ -112,28 +119,16 @@ class BaseAgent(ABC):
             agent=self.agent_name,
             model=model,
             duration=round(elapsed, 2),
-            input_tokens=input_tokens,
-            output_tokens=output_tokens,
+            input_tokens=usage.input_tokens,
+            output_tokens=usage.output_tokens,
         )
+        result: T = response.content  # type: ignore[assignment]
         return result
 
-    def _track_cost(
-        self,
-        state: PipelineState,
-        input_tokens: int,
-        output_tokens: int,
-        model: str,
-    ) -> None:
+    def _track_cost(self, state: PipelineState, usage: TokenUsage) -> None:
         """Track token usage and enforce cost guardrail."""
-        state.total_tokens += input_tokens + output_tokens
-
-        prices = TOKEN_PRICES.get(model)
-        if prices:
-            cost = (
-                input_tokens * prices["input"] / 1_000_000
-                + output_tokens * prices["output"] / 1_000_000
-            )
-            state.total_cost_usd += cost
+        state.total_tokens += usage.total_tokens
+        state.total_cost_usd += usage.total_cost_usd
 
         if state.total_cost_usd > self.settings.max_cost_per_run_usd:
             raise CostLimitExceededError(
@@ -147,6 +142,10 @@ class BaseAgent(ABC):
                 current_cost=round(state.total_cost_usd, 3),
                 limit=self.settings.max_cost_per_run_usd,
             )
+
+    async def close(self) -> None:
+        """Clean up LLM client resources."""
+        await self._llm_client.close()
 
     def _record_error(
         self,

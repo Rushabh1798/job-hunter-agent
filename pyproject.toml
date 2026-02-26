@@ -8,8 +8,7 @@ dependencies = [
     "pydantic>=2.0",
     "pydantic-settings>=2.0",
     # LLM
-    "anthropic>=0.40",
-    "instructor>=1.0",
+    "llm-gateway[anthropic] @ git+https://github.com/Rushabh1798/llm-gateway.git@6139a70",
     # Orchestration (for internal agent graphs)
     "langgraph>=0.2",
     # Scraping
@@ -120,6 +119,8 @@ module = [
     "openpyxl.*",
     "instructor",
     "instructor.*",
+    "llm_gateway",
+    "llm_gateway.*",
     "opentelemetry",
     "opentelemetry.*",
     "temporalio",
@@ -147,6 +148,9 @@ markers = [
 [tool.coverage.report]
 fail_under = 90
 exclude_lines = ["pragma: no cover", "if TYPE_CHECKING:"]
+
+[tool.hatch.metadata]
+allow-direct-references = true
 
 [build-system]
 requires = ["hatchling"]

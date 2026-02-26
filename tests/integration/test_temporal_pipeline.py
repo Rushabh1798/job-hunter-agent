@@ -25,7 +25,7 @@ def _make_temporal_settings(**overrides: object) -> MagicMock:
     """Create settings pointing to local Temporal."""
     from tests.mocks.mock_settings import make_settings
 
-    defaults = {
+    defaults: dict[str, object] = {
         "orchestrator": "temporal",
         "temporal_address": "localhost:7233",
         "temporal_namespace": "default",

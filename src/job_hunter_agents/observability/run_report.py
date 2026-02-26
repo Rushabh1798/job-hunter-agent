@@ -257,5 +257,5 @@ def _span_duration_ms(span: Any) -> float:  # noqa: ANN401
     start = getattr(span, "start_time", None)
     end = getattr(span, "end_time", None)
     if start is not None and end is not None:
-        return (end - start) / 1_000_000  # ns -> ms
+        return float((end - start) / 1_000_000)  # ns -> ms
     return 0.0

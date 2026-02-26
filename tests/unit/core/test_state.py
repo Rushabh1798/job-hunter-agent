@@ -298,3 +298,26 @@ class TestBuildResult:
 
         assert len(result.output_files) == 2
         assert all(isinstance(f, Path) for f in result.output_files)
+
+
+@pytest.mark.unit
+class TestAdaptivePipelineFields:
+    """Test adaptive pipeline fields on PipelineState."""
+
+    def test_default_adaptive_fields(self) -> None:
+        """New state has empty attempted_company_names and zero iteration."""
+        state = make_pipeline_state()
+        assert state.attempted_company_names == set()
+        assert state.discovery_iteration == 0
+
+    def test_adaptive_fields_roundtrip(self) -> None:
+        """attempted_company_names and discovery_iteration survive checkpoint."""
+        state = make_pipeline_state()
+        state.attempted_company_names = {"Google", "Meta", "Stripe"}
+        state.discovery_iteration = 2
+
+        cp = state.to_checkpoint("find_companies")
+        restored = PipelineState.from_checkpoint(cp)
+
+        assert restored.attempted_company_names == {"Google", "Meta", "Stripe"}
+        assert restored.discovery_iteration == 2

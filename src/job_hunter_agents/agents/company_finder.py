@@ -18,7 +18,7 @@ from job_hunter_agents.tools.ats_clients.lever import LeverClient
 from job_hunter_agents.tools.ats_clients.workday import WorkdayClient
 from job_hunter_agents.tools.factories import create_search_provider
 from job_hunter_core.exceptions import FatalAgentError
-from job_hunter_core.models.company import ATSType, CareerPage, Company
+from job_hunter_core.models.company import ATSType, CareerPage, Company, CompanyTier
 from job_hunter_core.state import PipelineState
 
 logger = structlog.get_logger()
@@ -31,6 +31,10 @@ class CompanyCandidate(BaseModel):
     domain: str = Field(description="Company website domain")
     industry: str | None = Field(default=None, description="Industry")
     size: str | None = Field(default=None, description="Company size")
+    tier: str = Field(
+        default="unknown",
+        description="Company tier: tier_1, tier_2, tier_3, startup",
+    )
     description: str | None = Field(default=None, description="Brief description")
 
 
@@ -98,6 +102,16 @@ class CompanyFinderAgent(BaseAgent):
                 for name in prefs.preferred_companies
             ]
 
+        # Use profile as fallback when prefs fields are empty
+        locations = ", ".join(prefs.preferred_locations) or profile.location or "Any"
+        target_titles = ", ".join(prefs.target_titles) or profile.current_title or "Any"
+        industries = ", ".join(prefs.preferred_industries) or ", ".join(profile.industries) or "Any"
+        seniority = ", ".join(prefs.target_seniority) or profile.seniority_level or "Any"
+
+        # Merge user exclusions with already-attempted companies
+        all_excluded = set(prefs.excluded_companies) | state.attempted_company_names
+        excluded_str = ", ".join(sorted(all_excluded)) or "None"
+
         result = await self._call_llm(
             messages=[
                 {
@@ -109,14 +123,14 @@ class CompanyFinderAgent(BaseAgent):
                         skills=", ".join(s.name for s in profile.skills),
                         industries=", ".join(profile.industries) or "Not specified",
                         tech_stack=", ".join(profile.tech_stack) or "Not specified",
-                        target_titles=", ".join(prefs.target_titles) or "Any",
-                        target_seniority=", ".join(prefs.target_seniority) or "Any",
-                        preferred_locations=", ".join(prefs.preferred_locations) or "Any",
+                        target_titles=target_titles,
+                        target_seniority=seniority,
+                        preferred_locations=locations,
                         remote_preference=prefs.remote_preference,
-                        preferred_industries=", ".join(prefs.preferred_industries) or "Any",
+                        preferred_industries=industries,
                         org_types=", ".join(prefs.org_types),
                         company_sizes=", ".join(prefs.company_sizes) or "Any",
-                        excluded_companies=", ".join(prefs.excluded_companies) or "None",
+                        excluded_companies=excluded_str,
                         preferred_companies=", ".join(prefs.preferred_companies) or "None",
                         salary_currency=prefs.currency,
                     ),
@@ -136,6 +150,7 @@ class CompanyFinderAgent(BaseAgent):
             return None
 
         ats_type, strategy = await self._detect_ats(career_url)
+        tier = self._map_tier(candidate.tier)
 
         return Company(
             name=candidate.name,
@@ -147,8 +162,17 @@ class CompanyFinderAgent(BaseAgent):
             ),
             industry=candidate.industry,
             size=candidate.size,
+            tier=tier,
             description=candidate.description,
         )
+
+    @staticmethod
+    def _map_tier(tier_str: str) -> CompanyTier:
+        """Map raw tier string from LLM to CompanyTier enum."""
+        try:
+            return CompanyTier(tier_str.lower().strip())
+        except ValueError:
+            return CompanyTier.UNKNOWN
 
     async def _find_career_url(self, candidate: CompanyCandidate) -> str | None:
         """Find the career page URL for a company."""

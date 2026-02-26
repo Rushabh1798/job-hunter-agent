@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import time
+from datetime import UTC, date, datetime
 
 import structlog
 from pydantic import BaseModel, Field
@@ -35,6 +36,12 @@ class ExtractedJob(BaseModel):
     salary_min: int | None = Field(default=None, description="Min salary")
     salary_max: int | None = Field(default=None, description="Max salary")
     currency: str | None = Field(default=None, description="Salary currency")
+    posted_date: str | None = Field(
+        default=None, description="Job posting date if found (YYYY-MM-DD)"
+    )
+    apply_url: str | None = Field(
+        default=None, description="Direct application URL if found in the content"
+    )
     required_skills: list[str] = Field(default_factory=list)
     preferred_skills: list[str] = Field(default_factory=list)
     required_experience_years: float | None = Field(default=None)
@@ -100,8 +107,20 @@ class JobProcessorAgent(BaseAgent):
         if isinstance(loc_data, dict):
             location = str(loc_data.get("name", ""))
 
-        apply_url = str(data.get("absolute_url", data.get("applyUrl", str(raw_job.source_url))))
+        apply_url = str(
+            data.get(
+                "absolute_url",
+                data.get(
+                    "applyUrl",
+                    data.get(
+                        "applicationUrl",
+                        data.get("apply_url", str(raw_job.source_url)),
+                    ),
+                ),
+            )
+        )
 
+        posted_date = self._extract_posted_date(data)
         content_hash = self._compute_hash(raw_job.company_name, title, jd_text)
 
         return NormalizedJob(
@@ -112,6 +131,7 @@ class JobProcessorAgent(BaseAgent):
             jd_text=jd_text,
             apply_url=apply_url,
             location=location or None,
+            posted_date=posted_date,
             content_hash=content_hash,
         )
 
@@ -150,6 +170,7 @@ class JobProcessorAgent(BaseAgent):
             return None
 
         content_hash = self._compute_hash(raw_job.company_name, extracted.title, extracted.jd_text)
+        posted_date = self._parse_date_string(extracted.posted_date)
 
         return NormalizedJob(
             raw_job_id=raw_job.id,
@@ -157,9 +178,10 @@ class JobProcessorAgent(BaseAgent):
             company_name=raw_job.company_name,
             title=extracted.title,
             jd_text=extracted.jd_text,
-            apply_url=raw_job.source_url,
+            apply_url=extracted.apply_url or str(raw_job.source_url),
             location=extracted.location,
             remote_type=extracted.remote_type,
+            posted_date=posted_date,
             salary_min=extracted.salary_min,
             salary_max=extracted.salary_max,
             currency=extracted.currency,
@@ -170,6 +192,45 @@ class JobProcessorAgent(BaseAgent):
             department=extracted.department,
             content_hash=content_hash,
         )
+
+    def _extract_posted_date(self, data: dict[str, object]) -> date | None:
+        """Extract posted date from ATS JSON fields."""
+        # Try known date fields in priority order
+        for field_name in (
+            "updated_at",
+            "publishedAt",
+            "published_at",
+            "created_at",
+            "date_posted",
+            "createdAt",
+        ):
+            value = data.get(field_name)
+            if value is None:
+                continue
+            # Unix ms timestamp (Lever uses createdAt as int)
+            if isinstance(value, (int, float)) and value > 1_000_000_000:
+                ts = value / 1000 if value > 1_000_000_000_000 else value
+                return datetime.fromtimestamp(ts, tz=UTC).date()
+            if isinstance(value, str):
+                parsed = self._parse_date_string(value)
+                if parsed:
+                    return parsed
+        return None
+
+    @staticmethod
+    def _parse_date_string(value: str | None) -> date | None:
+        """Parse a date string in common formats to date."""
+        if not value:
+            return None
+        # Extract YYYY-MM-DD from the start of any ISO 8601 string
+        date_part = value.split("T")[0].split("+")[0].strip()
+        parts = date_part.split("-")
+        if len(parts) == 3:
+            try:
+                return date(int(parts[0]), int(parts[1]), int(parts[2]))
+            except (ValueError, IndexError):
+                pass
+        return None
 
     def _compute_hash(self, company_name: str, title: str, jd_text: str) -> str:
         """Compute deduplication hash."""

@@ -12,6 +12,7 @@ from job_hunter_agents.agents.company_finder import (
 )
 from job_hunter_core.exceptions import FatalAgentError
 from job_hunter_core.models.candidate import CandidateProfile, SearchPreferences, Skill
+from job_hunter_core.models.company import CompanyTier
 from job_hunter_core.models.run import RunConfig
 from job_hunter_core.state import PipelineState
 from tests.mocks.mock_settings import make_settings
@@ -110,3 +111,20 @@ class TestCompanyFinderAgent:
         ats_type, strategy = await agent._detect_ats("https://company.com/careers")
         assert ats_type == ATSType.UNKNOWN
         assert strategy == "crawl4ai"
+
+    def test_map_tier_valid_values(self) -> None:
+        """Valid tier strings map to CompanyTier enum."""
+        assert CompanyFinderAgent._map_tier("tier_1") == CompanyTier.TIER_1
+        assert CompanyFinderAgent._map_tier("tier_2") == CompanyTier.TIER_2
+        assert CompanyFinderAgent._map_tier("tier_3") == CompanyTier.TIER_3
+        assert CompanyFinderAgent._map_tier("startup") == CompanyTier.STARTUP
+
+    def test_map_tier_case_insensitive(self) -> None:
+        """Tier mapping handles case variations."""
+        assert CompanyFinderAgent._map_tier("TIER_1") == CompanyTier.TIER_1
+        assert CompanyFinderAgent._map_tier(" Tier_2 ") == CompanyTier.TIER_2
+
+    def test_map_tier_unknown_fallback(self) -> None:
+        """Invalid tier strings fall back to UNKNOWN."""
+        assert CompanyFinderAgent._map_tier("mega_corp") == CompanyTier.UNKNOWN
+        assert CompanyFinderAgent._map_tier("") == CompanyTier.UNKNOWN

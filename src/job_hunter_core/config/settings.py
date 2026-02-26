@@ -173,8 +173,8 @@ class Settings(BaseSettings):
 
     # --- Scoring ---
     min_score_threshold: int = Field(
-        default=60,
-        description="Minimum score to include in output",
+        default=80,
+        description="Minimum score (0-100) to include in output",
     )
     top_k_semantic: int = Field(
         default=50,
@@ -183,6 +183,16 @@ class Settings(BaseSettings):
     max_jobs_per_company: int = Field(
         default=10,
         description="Maximum jobs to process per company",
+    )
+
+    # --- Adaptive Pipeline ---
+    min_recommended_jobs: int = Field(
+        default=10,
+        description="Minimum number of recommended jobs to aim for",
+    )
+    max_discovery_iterations: int = Field(
+        default=3,
+        description="Maximum discovery loop iterations in adaptive pipeline",
     )
 
     # --- Run ---

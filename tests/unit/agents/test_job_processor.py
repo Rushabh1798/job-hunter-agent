@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import date
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
 from uuid import uuid4
@@ -179,3 +180,144 @@ class TestJobProcessorAgent:
 
         assert len(result.normalized_jobs) == 1
         assert result.normalized_jobs[0].title == "Senior Python Developer"
+
+    @pytest.mark.asyncio
+    async def test_json_extracts_posted_date_iso(self) -> None:
+        """ATS JSON with ISO 8601 updated_at populates posted_date."""
+        settings = make_settings()
+        state = PipelineState(
+            config=RunConfig(resume_path=Path("/tmp/test.pdf"), preferences_text="test")
+        )
+        raw = RawJob(
+            company_id=uuid4(),
+            company_name="Acme",
+            raw_json={
+                "title": "SWE",
+                "content": "Build things",
+                "location": {"name": "NYC"},
+                "absolute_url": "https://acme.com/jobs/1",
+                "updated_at": "2025-06-15T10:30:00Z",
+            },
+            source_url="https://acme.com/jobs",
+            scrape_strategy="api",
+            source_confidence=0.9,
+        )
+        state.raw_jobs = [raw]
+
+        agent = JobProcessorAgent(settings)
+        result = await agent.run(state)
+
+        assert len(result.normalized_jobs) == 1
+        assert result.normalized_jobs[0].posted_date == date(2025, 6, 15)
+
+    @pytest.mark.asyncio
+    async def test_json_extracts_posted_date_unix_ms(self) -> None:
+        """ATS JSON with Unix ms timestamp (Lever) populates posted_date."""
+        settings = make_settings()
+        state = PipelineState(
+            config=RunConfig(resume_path=Path("/tmp/test.pdf"), preferences_text="test")
+        )
+        raw = RawJob(
+            company_id=uuid4(),
+            company_name="LeverCo",
+            raw_json={
+                "title": "PM",
+                "content": "Product management role",
+                "createdAt": 1718400000000,  # 2024-06-15 approx
+            },
+            source_url="https://lever.co/jobs",
+            scrape_strategy="api",
+            source_confidence=0.9,
+        )
+        state.raw_jobs = [raw]
+
+        agent = JobProcessorAgent(settings)
+        result = await agent.run(state)
+
+        assert len(result.normalized_jobs) == 1
+        assert result.normalized_jobs[0].posted_date is not None
+
+    @pytest.mark.asyncio
+    async def test_json_apply_url_fallback_chain(self) -> None:
+        """JSON apply_url falls through chain: applicationUrl -> source_url."""
+        settings = make_settings()
+        state = PipelineState(
+            config=RunConfig(resume_path=Path("/tmp/test.pdf"), preferences_text="test")
+        )
+        raw = RawJob(
+            company_id=uuid4(),
+            company_name="AshbyCo",
+            raw_json={
+                "title": "SWE",
+                "content": "Build features",
+                "applicationUrl": "https://ashby.co/apply/123",
+            },
+            source_url="https://ashby.co/jobs",
+            scrape_strategy="api",
+            source_confidence=0.9,
+        )
+        state.raw_jobs = [raw]
+
+        agent = JobProcessorAgent(settings)
+        result = await agent.run(state)
+
+        assert len(result.normalized_jobs) == 1
+        assert "ashby.co/apply/123" in str(result.normalized_jobs[0].apply_url)
+
+    @pytest.mark.asyncio
+    async def test_html_extracts_apply_url_from_llm(self) -> None:
+        """HTML processing uses LLM-extracted apply_url when available."""
+        settings = make_settings()
+        state = PipelineState(
+            config=RunConfig(resume_path=Path("/tmp/test.pdf"), preferences_text="test")
+        )
+        state.raw_jobs = [_make_raw_job_html()]
+
+        fake_extracted = ExtractedJob(
+            title="Senior Dev",
+            jd_text="Looking for a senior dev...",
+            is_valid_posting=True,
+            apply_url="https://acme.com/apply/specific-job-42",
+            posted_date="2025-07-01",
+        )
+
+        with patch.object(
+            JobProcessorAgent,
+            "_call_llm",
+            new_callable=AsyncMock,
+            return_value=fake_extracted,
+        ):
+            agent = JobProcessorAgent(settings)
+            result = await agent.run(state)
+
+        assert len(result.normalized_jobs) == 1
+        assert "specific-job-42" in str(result.normalized_jobs[0].apply_url)
+        assert result.normalized_jobs[0].posted_date == date(2025, 7, 1)
+
+    @pytest.mark.asyncio
+    async def test_html_falls_back_to_source_url(self) -> None:
+        """HTML processing falls back to source_url when LLM returns no apply_url."""
+        settings = make_settings()
+        state = PipelineState(
+            config=RunConfig(resume_path=Path("/tmp/test.pdf"), preferences_text="test")
+        )
+        state.raw_jobs = [_make_raw_job_html()]
+
+        fake_extracted = ExtractedJob(
+            title="Dev",
+            jd_text="Looking for a dev...",
+            is_valid_posting=True,
+            apply_url=None,
+        )
+
+        with patch.object(
+            JobProcessorAgent,
+            "_call_llm",
+            new_callable=AsyncMock,
+            return_value=fake_extracted,
+        ):
+            agent = JobProcessorAgent(settings)
+            result = await agent.run(state)
+
+        assert len(result.normalized_jobs) == 1
+        assert "acme.com/careers" in str(result.normalized_jobs[0].apply_url)

@@ -19,6 +19,12 @@ Pune, Chennai, etc.), prioritize companies with strong India engineering offices
 - Prefer companies that use standard ATS systems (Greenhouse, Lever, Ashby, Workday) \
 as these have more accessible job listings
 - Include direct career page domains when known (e.g., careers.google.com)
+- Classify each company into a tier:
+  - tier_1: Large tech companies (FAANG, top-50 by revenue), >10k employees
+  - tier_2: Established mid-to-large companies, 1k-10k employees, well-known brands
+  - tier_3: Growing companies, 200-1000 employees, strong funding
+  - startup: Early-to-growth stage, <200 employees
+- Aim for a balanced mix: ~30% tier_1, ~25% tier_2, ~25% tier_3, ~20% startup
 </rules>
 """
 
@@ -50,5 +56,6 @@ Generate 20-30 target companies. For each, provide:
 - domain: Primary website domain
 - industry: Company's primary industry
 - size: Company size category (startup/mid/large/enterprise)
+- tier: Company tier (tier_1, tier_2, tier_3, startup)
 - description: Brief one-line description
 """

@@ -38,6 +38,8 @@ def make_settings(**overrides: object) -> MagicMock:
     settings.otel_endpoint = "http://localhost:4317"
     settings.otel_service_name = "job-hunter-test"
     settings.min_score_threshold = 60
+    settings.min_recommended_jobs = 10
+    settings.max_discovery_iterations = 3
     settings.max_concurrent_scrapers = 5
     settings.max_jobs_per_company = 10
     settings.top_k_semantic = 50

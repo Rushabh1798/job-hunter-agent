@@ -31,6 +31,10 @@ class PipelineState:
     normalized_jobs: list[NormalizedJob] = field(default_factory=list)
     scored_jobs: list[ScoredJob] = field(default_factory=list)
 
+    # Adaptive pipeline tracking
+    attempted_company_names: set[str] = field(default_factory=set)
+    discovery_iteration: int = 0
+
     # Cross-cutting
     errors: list[AgentError] = field(default_factory=list)
     total_tokens: int = 0
@@ -50,6 +54,8 @@ class PipelineState:
             "normalized_jobs": [json.loads(j.model_dump_json()) for j in self.normalized_jobs],
             "scored_jobs": [json.loads(j.model_dump_json()) for j in self.scored_jobs],
             "errors": [json.loads(e.model_dump_json()) for e in self.errors],
+            "attempted_company_names": sorted(self.attempted_company_names),
+            "discovery_iteration": self.discovery_iteration,
             "total_tokens": self.total_tokens,
             "total_cost_usd": self.total_cost_usd,
             "run_result": (
@@ -96,6 +102,14 @@ class PipelineState:
         scored_data = snap.get("scored_jobs")
         if isinstance(scored_data, list):
             state.scored_jobs = [ScoredJob(**j) for j in scored_data]
+
+        attempted_data = snap.get("attempted_company_names")
+        if isinstance(attempted_data, list):
+            state.attempted_company_names = set(attempted_data)
+
+        iteration_data = snap.get("discovery_iteration")
+        if isinstance(iteration_data, int):
+            state.discovery_iteration = iteration_data
 
         errors_data = snap.get("errors")
         if isinstance(errors_data, list):

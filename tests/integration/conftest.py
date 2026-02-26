@@ -2,14 +2,12 @@
 
 from __future__ import annotations
 
-import functools
 import logging
 import socket
 import time
-from collections.abc import AsyncGenerator, Callable, Generator
+from collections.abc import AsyncGenerator, Generator
 from contextlib import ExitStack
 from pathlib import Path
-from typing import Any
 
 import pytest
 import pytest_asyncio
@@ -49,53 +47,27 @@ def _tcp_reachable(
 
 _pg_up = _tcp_reachable("localhost", 5432, retries=15)
 _redis_up = _tcp_reachable("localhost", 6379, retries=10)
-
-
-@functools.cache
-def _is_temporal_up() -> bool:
-    """Check Temporal availability lazily (cached after first call).
-
-    Uses only 3 retries with 1s delay (max 3s) to avoid penalizing
-    test runs when Temporal is not running.
-    """
-    return _tcp_reachable("localhost", 7233, retries=3, delay=1.0)
+_temporal_up = _tcp_reachable("localhost", 7233, retries=15, delay=2.0)
 
 
 # Hard-fail markers — integration tests MUST have containers running
 require_postgres = pytest.mark.skipif(
     not _pg_up,
-    reason="PostgreSQL not reachable on localhost:5432 — run `make dev` first",
+    reason="PostgreSQL not reachable on localhost:5432 — run `make dev-temporal` first",
 )
 require_redis = pytest.mark.skipif(
     not _redis_up,
-    reason="Redis not reachable on localhost:6379 — run `make dev` first",
+    reason="Redis not reachable on localhost:6379 — run `make dev-temporal` first",
+)
+require_temporal = pytest.mark.skipif(
+    not _temporal_up,
+    reason="Temporal not reachable on localhost:7233 — run `make dev-temporal` first",
 )
 
 # Keep old names for backwards compat with existing test files
 skip_no_postgres = require_postgres
 skip_no_redis = require_redis
-
-
-def skip_no_temporal[F: Callable[..., Any]](func: F) -> F:
-    """Skip decorator for tests requiring Temporal (lazy check)."""
-
-    @functools.wraps(func)
-    def wrapper(*args: Any, **kwargs: Any) -> Any:  # noqa: ANN401
-        if not _is_temporal_up():
-            pytest.skip("Temporal not reachable on localhost:7233 — run `make dev-temporal` first")
-        return func(*args, **kwargs)
-
-    @functools.wraps(func)
-    async def async_wrapper(*args: Any, **kwargs: Any) -> Any:  # noqa: ANN401
-        if not _is_temporal_up():
-            pytest.skip("Temporal not reachable on localhost:7233 — run `make dev-temporal` first")
-        return await func(*args, **kwargs)
-
-    import asyncio
-
-    if asyncio.iscoroutinefunction(func):
-        return async_wrapper  # type: ignore[return-value]
-    return wrapper  # type: ignore[return-value]
+skip_no_temporal = require_temporal
 
 
 # ---------------------------------------------------------------------------

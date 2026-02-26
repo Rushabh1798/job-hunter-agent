@@ -48,12 +48,12 @@ dev-down: ## Stop infrastructure services
 test: ## Run unit tests
 	uv run pytest -m unit
 
-test-int: ## Start infra and run integration tests (dry-run)
-	$(MAKE) dev
-	uv run pytest -m integration
+test-int: ## Start all infra (postgres + redis + temporal) and run integration tests
+	$(MAKE) dev-temporal
+	uv run pytest -m integration -v
 
-test-int-real: ## Start infra and run integration tests with real scraping (network required)
-	$(MAKE) dev
+test-int-real: ## Start all infra and run integration tests with real scraping (network required)
+	$(MAKE) dev-temporal
 	uv run pytest -m "integration and slow" -v
 
 test-e2e: ## Run e2e tests (requires API keys in .env)

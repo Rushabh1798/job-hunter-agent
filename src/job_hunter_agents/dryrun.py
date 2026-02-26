@@ -3,7 +3,24 @@
 from __future__ import annotations
 
 from contextlib import ExitStack
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
+
+
+def _build_fake_llm_client() -> object:
+    """Build a FakeLLMProvider-backed LLMClient for dry-run mode."""
+    from llm_gateway import (  # type: ignore[import-untyped]
+        FakeLLMProvider,
+        GatewayConfig,
+        LLMClient,
+    )
+
+    from tests.mocks.mock_llm import fixture_response_factory
+
+    fake_provider = FakeLLMProvider(response_factory=fixture_response_factory)
+    return LLMClient(
+        config=GatewayConfig(provider="fake", trace_enabled=False, log_format="console"),
+        provider_instance=fake_provider,
+    )
 
 
 def activate_dry_run_patches() -> ExitStack:
@@ -15,8 +32,6 @@ def activate_dry_run_patches() -> ExitStack:
 
     Shared by both CLI ``--dry-run`` and pipeline-logic integration tests.
     """
-    # Lazy import to avoid circular deps and test-only deps in production
-    from tests.mocks.mock_llm import FakeInstructorClient
     from tests.mocks.mock_tools import (
         FakeAshbyClient,
         FakeEmailSender,
@@ -110,22 +125,12 @@ def activate_dry_run_patches() -> ExitStack:
         )
     )
 
-    # --- Base agent: AsyncAnthropic + instructor ---
-    # Prevent real API client creation
+    # --- Base agent: LLM client via llm-gateway ---
+    fake_client = _build_fake_llm_client()
     stack.enter_context(
         patch(
-            "job_hunter_agents.agents.base.AsyncAnthropic",
-            MagicMock,
-        )
-    )
-
-    # Make instructor.from_anthropic() return FakeInstructorClient
-    fake_instructor = MagicMock()
-    fake_instructor.from_anthropic.return_value = FakeInstructorClient()
-    stack.enter_context(
-        patch(
-            "job_hunter_agents.agents.base.instructor",
-            fake_instructor,
+            "job_hunter_agents.agents.base.BaseAgent._build_llm_client",
+            return_value=fake_client,
         )
     )
 
@@ -141,7 +146,6 @@ def activate_integration_patches() -> ExitStack:
 
     The caller must call ``stack.close()`` (or use ``with`` statement).
     """
-    from tests.mocks.mock_llm import FakeInstructorClient
     from tests.mocks.mock_tools import (
         FakeEmailSender,
         FakePDFParser,
@@ -165,20 +169,12 @@ def activate_integration_patches() -> ExitStack:
         )
     )
 
-    # --- Base agent: AsyncAnthropic + instructor ---
+    # --- Base agent: LLM client via llm-gateway ---
+    fake_client = _build_fake_llm_client()
     stack.enter_context(
         patch(
-            "job_hunter_agents.agents.base.AsyncAnthropic",
-            MagicMock,
-        )
-    )
-
-    fake_instructor = MagicMock()
-    fake_instructor.from_anthropic.return_value = FakeInstructorClient()
-    stack.enter_context(
-        patch(
-            "job_hunter_agents.agents.base.instructor",
-            fake_instructor,
+            "job_hunter_agents.agents.base.BaseAgent._build_llm_client",
+            return_value=fake_client,
         )
     )
 

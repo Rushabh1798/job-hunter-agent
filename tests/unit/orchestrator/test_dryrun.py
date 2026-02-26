@@ -7,7 +7,7 @@ from typing import Any
 
 import pytest
 
-from job_hunter_agents.dryrun import activate_dry_run_patches
+from job_hunter_agents.dryrun import activate_dry_run_patches, activate_integration_patches
 
 pytestmark = pytest.mark.unit
 
@@ -85,12 +85,16 @@ class TestActivateDryRunPatches:
         finally:
             stack.close()
 
-    def test_patches_instructor(self) -> None:
-        """instructor module is replaced in base agent module."""
+    def test_patches_llm_client(self) -> None:
+        """BaseAgent._build_llm_client is patched to return a fake client."""
+        from llm_gateway import LLMClient  # type: ignore[import-untyped]
+
         stack = activate_dry_run_patches()
         try:
-            base = importlib.import_module("job_hunter_agents.agents.base")
-            assert hasattr(base.instructor, "from_anthropic")  # type: ignore[attr-defined]
+            from job_hunter_agents.agents.base import BaseAgent
+
+            client = BaseAgent._build_llm_client(None)  # type: ignore[arg-type]
+            assert isinstance(client, LLMClient)
         finally:
             stack.close()
 
@@ -104,3 +108,48 @@ class TestActivateDryRunPatches:
         original_after = _get_attr("job_hunter_agents.agents.resume_parser", "PDFParser")
 
         assert original_before is original_after
+
+
+class TestActivateIntegrationPatches:
+    """Test that activate_integration_patches replaces only LLM + email + PDF."""
+
+    def test_returns_exit_stack(self) -> None:
+        """activate_integration_patches returns an ExitStack."""
+        from contextlib import ExitStack
+
+        stack = activate_integration_patches()
+        assert isinstance(stack, ExitStack)
+        stack.close()
+
+    def test_patches_llm_client(self) -> None:
+        """BaseAgent._build_llm_client is patched to return a fake client."""
+        from llm_gateway import LLMClient  # type: ignore[import-untyped]
+
+        stack = activate_integration_patches()
+        try:
+            from job_hunter_agents.agents.base import BaseAgent
+
+            client = BaseAgent._build_llm_client(None)  # type: ignore[arg-type]
+            assert isinstance(client, LLMClient)
+        finally:
+            stack.close()
+
+    def test_patches_pdf_parser(self) -> None:
+        """PDFParser is replaced in resume_parser module."""
+        stack = activate_integration_patches()
+        try:
+            cls = _get_attr("job_hunter_agents.agents.resume_parser", "PDFParser")
+            instance = cls()
+            assert hasattr(instance, "extract_text")
+        finally:
+            stack.close()
+
+    def test_patches_email_sender(self) -> None:
+        """EmailSender is replaced in notifier module."""
+        stack = activate_integration_patches()
+        try:
+            cls = _get_attr("job_hunter_agents.agents.notifier", "EmailSender")
+            instance = cls()
+            assert hasattr(instance, "send")
+        finally:
+            stack.close()

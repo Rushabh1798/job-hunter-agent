@@ -17,17 +17,7 @@ from job_hunter_core.models.candidate import CandidateProfile, SearchPreferences
 from job_hunter_core.models.job import NormalizedJob
 from job_hunter_core.models.run import RunConfig
 from job_hunter_core.state import PipelineState
-
-
-def _make_settings() -> AsyncMock:
-    """Create mock settings."""
-    settings = AsyncMock()
-    settings.anthropic_api_key.get_secret_value.return_value = "test-key"
-    settings.sonnet_model = "claude-sonnet-4-5-20250514"
-    settings.max_cost_per_run_usd = 5.0
-    settings.warn_cost_threshold_usd = 2.0
-    settings.min_score_threshold = 60
-    return settings
+from tests.mocks.mock_settings import make_settings
 
 
 def _make_normalized_job(title: str = "SWE") -> NormalizedJob:
@@ -74,7 +64,7 @@ class TestJobsScorerAgent:
     @pytest.mark.asyncio
     async def test_scores_jobs(self) -> None:
         """Agent scores normalized jobs and filters by threshold."""
-        settings = _make_settings()
+        settings = make_settings()
         state = _make_state_with_jobs()
 
         mock_result = BatchScoreResult(
@@ -94,15 +84,11 @@ class TestJobsScorerAgent:
             ]
         )
 
-        with (
-            patch.object(
-                JobsScorerAgent,
-                "_call_llm",
-                new_callable=AsyncMock,
-                return_value=mock_result,
-            ),
-            patch("job_hunter_agents.agents.base.AsyncAnthropic"),
-            patch("job_hunter_agents.agents.base.instructor"),
+        with patch.object(
+            JobsScorerAgent,
+            "_call_llm",
+            new_callable=AsyncMock,
+            return_value=mock_result,
         ):
             agent = JobsScorerAgent(settings)
             result = await agent.run(state)
@@ -114,8 +100,7 @@ class TestJobsScorerAgent:
     @pytest.mark.asyncio
     async def test_filters_below_threshold(self) -> None:
         """Jobs below min_score_threshold are excluded."""
-        settings = _make_settings()
-        settings.min_score_threshold = 80
+        settings = make_settings(min_score_threshold=80)
         state = _make_state_with_jobs()
 
         mock_result = BatchScoreResult(
@@ -135,15 +120,11 @@ class TestJobsScorerAgent:
             ]
         )
 
-        with (
-            patch.object(
-                JobsScorerAgent,
-                "_call_llm",
-                new_callable=AsyncMock,
-                return_value=mock_result,
-            ),
-            patch("job_hunter_agents.agents.base.AsyncAnthropic"),
-            patch("job_hunter_agents.agents.base.instructor"),
+        with patch.object(
+            JobsScorerAgent,
+            "_call_llm",
+            new_callable=AsyncMock,
+            return_value=mock_result,
         ):
             agent = JobsScorerAgent(settings)
             result = await agent.run(state)
@@ -154,7 +135,7 @@ class TestJobsScorerAgent:
     @pytest.mark.asyncio
     async def test_skips_without_profile(self) -> None:
         """Agent returns early if profile is missing."""
-        settings = _make_settings()
+        settings = make_settings()
         state = PipelineState(
             config=RunConfig(
                 resume_path=Path("/tmp/test.pdf"),
@@ -162,25 +143,17 @@ class TestJobsScorerAgent:
             )
         )
 
-        with (
-            patch("job_hunter_agents.agents.base.AsyncAnthropic"),
-            patch("job_hunter_agents.agents.base.instructor"),
-        ):
-            agent = JobsScorerAgent(settings)
-            result = await agent.run(state)
+        agent = JobsScorerAgent(settings)
+        result = await agent.run(state)
 
         assert len(result.scored_jobs) == 0
 
     def test_format_jobs_block(self) -> None:
         """Jobs block formatting includes all key fields."""
-        settings = _make_settings()
-        with (
-            patch("job_hunter_agents.agents.base.AsyncAnthropic"),
-            patch("job_hunter_agents.agents.base.instructor"),
-        ):
-            agent = JobsScorerAgent(settings)
-            jobs = [_make_normalized_job("Test Role")]
-            block = agent._format_jobs_block(jobs)
+        settings = make_settings()
+        agent = JobsScorerAgent(settings)
+        jobs = [_make_normalized_job("Test Role")]
+        block = agent._format_jobs_block(jobs)
 
         assert "Test Role" in block
         assert "TestCo" in block

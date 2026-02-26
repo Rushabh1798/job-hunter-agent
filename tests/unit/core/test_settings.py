@@ -59,8 +59,29 @@ class TestSettings:
         assert s.embedding_dimension == 1024
 
     def test_missing_anthropic_key_raises(self) -> None:
-        """Missing anthropic_api_key raises validation error."""
-        env = {"JH_TAVILY_API_KEY": "tvly-test"}
+        """Missing anthropic_api_key raises validation error when llm_provider=anthropic."""
+        env = {"JH_TAVILY_API_KEY": "tvly-test", "JH_LLM_PROVIDER": "anthropic"}
         with patch.dict(os.environ, env, clear=True):
-            with pytest.raises(ValidationError):
+            with pytest.raises(ValidationError, match="anthropic_api_key required"):
                 Settings()  # type: ignore[call-arg]
+
+    def test_fake_provider_no_api_key_needed(self) -> None:
+        """llm_provider=fake does not require anthropic_api_key."""
+        env = {
+            "JH_LLM_PROVIDER": "fake",
+            "JH_TAVILY_API_KEY": "tvly-test",
+        }
+        with patch.dict(os.environ, env, clear=False):
+            s = Settings()  # type: ignore[call-arg]
+        assert s.llm_provider == "fake"
+        assert s.anthropic_api_key is None
+
+    def test_local_claude_provider_no_api_key_needed(self) -> None:
+        """llm_provider=local_claude does not require anthropic_api_key."""
+        env = {
+            "JH_LLM_PROVIDER": "local_claude",
+            "JH_TAVILY_API_KEY": "tvly-test",
+        }
+        with patch.dict(os.environ, env, clear=False):
+            s = Settings()  # type: ignore[call-arg]
+        assert s.llm_provider == "local_claude"

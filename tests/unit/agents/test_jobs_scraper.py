@@ -11,16 +11,7 @@ from job_hunter_agents.agents.jobs_scraper import JobsScraperAgent
 from job_hunter_core.models.company import ATSType, CareerPage, Company
 from job_hunter_core.models.run import RunConfig
 from job_hunter_core.state import PipelineState
-
-
-def _make_settings() -> AsyncMock:
-    """Create mock settings."""
-    settings = AsyncMock()
-    settings.anthropic_api_key.get_secret_value.return_value = "test-key"
-    settings.max_concurrent_scrapers = 2
-    settings.max_cost_per_run_usd = 5.0
-    settings.warn_cost_threshold_usd = 2.0
-    return settings
+from tests.mocks.mock_settings import make_settings
 
 
 def _make_company(
@@ -47,7 +38,7 @@ class TestJobsScraperAgent:
     @pytest.mark.asyncio
     async def test_scrapes_via_crawler(self) -> None:
         """Crawl4ai strategy creates RawJob with HTML content."""
-        settings = _make_settings()
+        settings = make_settings(max_concurrent_scrapers=2)
         state = PipelineState(
             config=RunConfig(
                 resume_path=Path("/tmp/test.pdf"),
@@ -56,11 +47,7 @@ class TestJobsScraperAgent:
         )
         state.companies = [_make_company()]
 
-        with (
-            patch("job_hunter_agents.agents.jobs_scraper.create_page_scraper") as mock_scraper_cls,
-            patch("job_hunter_agents.agents.base.AsyncAnthropic"),
-            patch("job_hunter_agents.agents.base.instructor"),
-        ):
+        with patch("job_hunter_agents.agents.jobs_scraper.create_page_scraper") as mock_scraper_cls:
             mock_scraper = mock_scraper_cls.return_value
             mock_scraper.fetch_page = AsyncMock(return_value="<html>jobs</html>")
 
@@ -73,7 +60,7 @@ class TestJobsScraperAgent:
     @pytest.mark.asyncio
     async def test_handles_scrape_error(self) -> None:
         """Scrape error is recorded but does not crash the pipeline."""
-        settings = _make_settings()
+        settings = make_settings(max_concurrent_scrapers=2)
         state = PipelineState(
             config=RunConfig(
                 resume_path=Path("/tmp/test.pdf"),
@@ -82,11 +69,7 @@ class TestJobsScraperAgent:
         )
         state.companies = [_make_company()]
 
-        with (
-            patch("job_hunter_agents.agents.jobs_scraper.create_page_scraper") as mock_scraper_cls,
-            patch("job_hunter_agents.agents.base.AsyncAnthropic"),
-            patch("job_hunter_agents.agents.base.instructor"),
-        ):
+        with patch("job_hunter_agents.agents.jobs_scraper.create_page_scraper") as mock_scraper_cls:
             mock_scraper = mock_scraper_cls.return_value
             mock_scraper.fetch_page = AsyncMock(side_effect=RuntimeError("Connection failed"))
 
@@ -99,7 +82,7 @@ class TestJobsScraperAgent:
     @pytest.mark.asyncio
     async def test_multiple_companies(self) -> None:
         """Agent scrapes multiple companies concurrently."""
-        settings = _make_settings()
+        settings = make_settings(max_concurrent_scrapers=2)
         state = PipelineState(
             config=RunConfig(
                 resume_path=Path("/tmp/test.pdf"),
@@ -111,11 +94,7 @@ class TestJobsScraperAgent:
             _make_company("CompB"),
         ]
 
-        with (
-            patch("job_hunter_agents.agents.jobs_scraper.create_page_scraper") as mock_scraper_cls,
-            patch("job_hunter_agents.agents.base.AsyncAnthropic"),
-            patch("job_hunter_agents.agents.base.instructor"),
-        ):
+        with patch("job_hunter_agents.agents.jobs_scraper.create_page_scraper") as mock_scraper_cls:
             mock_scraper = mock_scraper_cls.return_value
             mock_scraper.fetch_page = AsyncMock(return_value="<html>jobs</html>")
 

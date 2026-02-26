@@ -31,6 +31,9 @@ class _MockAgentA:
         state.total_tokens += 10
         return state
 
+    async def close(self) -> None:
+        """No-op cleanup."""
+
 
 class _MockAgentB:
     """Mock agent that marks itself as having run."""
@@ -42,6 +45,9 @@ class _MockAgentB:
         """Simulate step B completion."""
         state.total_tokens += 20
         return state
+
+    async def close(self) -> None:
+        """No-op cleanup."""
 
 
 @asynccontextmanager
@@ -99,6 +105,10 @@ def _enter_pipeline_patches(
     return mocks
 
 
+async def _noop_close(self: object) -> None:
+    """No-op close for dynamic mock agents."""
+
+
 def _make_error_steps(exc: Exception) -> list[tuple[str, type[object]]]:
     """Create a single-step pipeline that raises the given exception."""
     return [
@@ -110,6 +120,7 @@ def _make_error_steps(exc: Exception) -> list[tuple[str, type[object]]]:
                 {
                     "__init__": lambda self, s: None,
                     "run": AsyncMock(side_effect=exc),
+                    "close": _noop_close,
                 },
             ),
         ),
@@ -153,6 +164,9 @@ class TestPipeline:
                 call_log.append("parse_resume")
                 return state
 
+            async def close(self) -> None:
+                pass
+
         class _TrackB:
             def __init__(self, s: object) -> None:
                 pass
@@ -160,6 +174,9 @@ class TestPipeline:
             async def run(self, state: PipelineState) -> PipelineState:
                 call_log.append("step_b")
                 return state
+
+            async def close(self) -> None:
+                pass
 
         tracking_steps = [("parse_resume", _TrackA), ("step_b", _TrackB)]
 

@@ -14,17 +14,7 @@ from job_hunter_core.exceptions import FatalAgentError
 from job_hunter_core.models.candidate import CandidateProfile, SearchPreferences, Skill
 from job_hunter_core.models.run import RunConfig
 from job_hunter_core.state import PipelineState
-
-
-def _make_settings() -> AsyncMock:
-    """Create mock settings."""
-    settings = AsyncMock()
-    settings.anthropic_api_key.get_secret_value.return_value = "test-key"
-    settings.sonnet_model = "claude-sonnet-4-5-20250514"
-    settings.tavily_api_key.get_secret_value.return_value = "tavily-key"
-    settings.max_cost_per_run_usd = 5.0
-    settings.warn_cost_threshold_usd = 2.0
-    return settings
+from tests.mocks.mock_settings import make_settings
 
 
 def _make_state_with_profile() -> PipelineState:
@@ -57,7 +47,7 @@ class TestCompanyFinderAgent:
     @pytest.mark.asyncio
     async def test_raises_without_profile(self) -> None:
         """Agent raises FatalAgentError if profile missing."""
-        settings = _make_settings()
+        settings = make_settings()
         state = PipelineState(
             config=RunConfig(
                 resume_path=Path("/tmp/test.pdf"),
@@ -65,31 +55,23 @@ class TestCompanyFinderAgent:
             )
         )
 
-        with (
-            patch("job_hunter_agents.agents.base.AsyncAnthropic"),
-            patch("job_hunter_agents.agents.base.instructor"),
-        ):
-            agent = CompanyFinderAgent(settings)
-            with pytest.raises(FatalAgentError):
-                await agent.run(state)
+        agent = CompanyFinderAgent(settings)
+        with pytest.raises(FatalAgentError):
+            await agent.run(state)
 
     @pytest.mark.asyncio
     async def test_uses_preferred_companies(self) -> None:
         """Agent uses preferred_companies from prefs if available."""
-        settings = _make_settings()
+        settings = make_settings()
         state = _make_state_with_profile()
         assert state.preferences is not None
         state.preferences.preferred_companies = ["Stripe", "Figma"]
 
-        with (
-            patch.object(
-                CompanyFinderAgent,
-                "_validate_and_build",
-                new_callable=AsyncMock,
-            ) as mock_validate,
-            patch("job_hunter_agents.agents.base.AsyncAnthropic"),
-            patch("job_hunter_agents.agents.base.instructor"),
-        ):
+        with patch.object(
+            CompanyFinderAgent,
+            "_validate_and_build",
+            new_callable=AsyncMock,
+        ) as mock_validate:
             from job_hunter_core.models.company import ATSType, CareerPage, Company
 
             mock_validate.return_value = Company(
@@ -108,31 +90,23 @@ class TestCompanyFinderAgent:
     @pytest.mark.asyncio
     async def test_ats_detection(self) -> None:
         """ATS detection identifies Greenhouse URLs."""
-        settings = _make_settings()
+        settings = make_settings()
 
-        with (
-            patch("job_hunter_agents.agents.base.AsyncAnthropic"),
-            patch("job_hunter_agents.agents.base.instructor"),
-        ):
-            agent = CompanyFinderAgent(settings)
-            from job_hunter_core.models.company import ATSType
+        agent = CompanyFinderAgent(settings)
+        from job_hunter_core.models.company import ATSType
 
-            ats_type, strategy = await agent._detect_ats("https://boards.greenhouse.io/stripe")
-            assert ats_type == ATSType.GREENHOUSE
-            assert strategy == "api"
+        ats_type, strategy = await agent._detect_ats("https://boards.greenhouse.io/stripe")
+        assert ats_type == ATSType.GREENHOUSE
+        assert strategy == "api"
 
     @pytest.mark.asyncio
     async def test_ats_detection_unknown(self) -> None:
         """Unknown URLs get crawl4ai strategy."""
-        settings = _make_settings()
+        settings = make_settings()
 
-        with (
-            patch("job_hunter_agents.agents.base.AsyncAnthropic"),
-            patch("job_hunter_agents.agents.base.instructor"),
-        ):
-            agent = CompanyFinderAgent(settings)
-            from job_hunter_core.models.company import ATSType
+        agent = CompanyFinderAgent(settings)
+        from job_hunter_core.models.company import ATSType
 
-            ats_type, strategy = await agent._detect_ats("https://company.com/careers")
-            assert ats_type == ATSType.UNKNOWN
-            assert strategy == "crawl4ai"
+        ats_type, strategy = await agent._detect_ats("https://company.com/careers")
+        assert ats_type == ATSType.UNKNOWN
+        assert strategy == "crawl4ai"

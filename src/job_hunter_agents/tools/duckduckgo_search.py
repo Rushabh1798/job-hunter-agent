@@ -1,39 +1,38 @@
-"""Web search tool using Tavily API."""
+"""Web search tool using DuckDuckGo (no API key required)."""
 
 from __future__ import annotations
 
+import asyncio
+
 import structlog
-from tavily import TavilyClient
 
 from job_hunter_core.interfaces.search import SearchResult
 
 logger = structlog.get_logger()
 
-# Re-export SearchResult for backwards compatibility
-__all__ = ["SearchResult", "WebSearchTool"]
 
+class DuckDuckGoSearchTool:
+    """Free web search using DuckDuckGo — no API key required.
 
-class WebSearchTool:
-    """Web search using Tavily API."""
-
-    def __init__(self, api_key: str) -> None:
-        """Initialize with Tavily API key."""
-        self._client = TavilyClient(api_key=api_key)
+    Intended for integration tests and development. Uses the
+    ``ddgs`` library (dev dependency) via ``asyncio.to_thread()``.
+    """
 
     async def search(self, query: str, max_results: int = 5) -> list[SearchResult]:
-        """Perform a web search and return results."""
-        import asyncio
+        """Perform a web search via DuckDuckGo and return results."""
+        from ddgs import DDGS
 
         def _search() -> list[SearchResult]:
-            response = self._client.search(query=query, max_results=max_results)
+            with DDGS() as ddgs:
+                raw = list(ddgs.text(query, max_results=max_results))
             results: list[SearchResult] = []
-            for item in response.get("results", []):
+            for item in raw:
                 results.append(
                     SearchResult(
                         title=item.get("title", ""),
-                        url=item.get("url", ""),
-                        content=item.get("content", ""),
-                        score=item.get("score", 0.0),
+                        url=item.get("href", ""),
+                        content=item.get("body", ""),
+                        score=0.0,
                     )
                 )
             return results

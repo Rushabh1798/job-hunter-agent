@@ -69,6 +69,7 @@ dev = [
     "pytest-mock>=3.14",
     "ruff>=0.8",
     "mypy>=1.13",
+    "ddgs>=7.0",
 ]
 
 [tool.ruff]
@@ -123,6 +124,8 @@ module = [
     "opentelemetry.*",
     "temporalio",
     "temporalio.*",
+    "ddgs",
+    "ddgs.*",
 ]
 ignore_missing_imports = true
 follow_imports = "skip"
@@ -138,6 +141,7 @@ markers = [
     "live: requires real network access",
     "e2e: full end-to-end pipeline test",
     "slow: takes > 5 seconds",
+    "network: requires real network access to public APIs",
 ]
 
 [tool.coverage.report]

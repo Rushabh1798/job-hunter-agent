@@ -12,8 +12,11 @@ An autonomous multi-agent system that discovers relevant job openings for you. G
 - **Crash recovery** — JSON checkpoint files after each pipeline step; resume interrupted runs with `--resume-from`
 - **Temporal workflow mode** — durable workflow execution with per-company parallel scraping, automatic retry, and task queue routing (`--temporal`); falls back to checkpoints if Temporal is unavailable
 - **Cost guardrails** — configurable per-run spend limit with automatic stop
+- **Vendor-agnostic tools** — Protocol-based abstractions for search and scraping; swap providers via settings
 - **Dry-run mode** — mocks all external services (LLM, search, scraping, email) for safe testing with `--dry-run`
+- **Integration test mode** — real search (DuckDuckGo), real scraping, real ATS APIs; only LLM and email mocked
 - **OpenTelemetry tracing** — per-agent spans with cost/token attributes; visualize in Jaeger with `--trace`
+- **Run reports** — OTEL-based reports showing component status (mocked vs real), agent timing, and flow linkage
 
 ## Requirements
 
@@ -101,7 +104,8 @@ Key environment variables (see [`.env.example`](.env.example) for the full list)
 | Variable | Required | Description |
 |----------|----------|-------------|
 | `JH_ANTHROPIC_API_KEY` | Yes | Anthropic API key for Claude |
-| `JH_TAVILY_API_KEY` | Yes | Tavily API key for web search |
+| `JH_TAVILY_API_KEY` | Yes* | Tavily API key for web search (*not needed if `JH_SEARCH_PROVIDER=duckduckgo`) |
+| `JH_SEARCH_PROVIDER` | No | `tavily` (default) or `duckduckgo` (free, no API key) |
 | `JH_DB_BACKEND` | No | `sqlite` (default) or `postgres` |
 | `JH_MAX_COST_PER_RUN_USD` | No | Per-run cost limit (default: $5.00) |
 | `JH_EMAIL_PROVIDER` | No | `smtp` or `sendgrid` (for email notifications) |

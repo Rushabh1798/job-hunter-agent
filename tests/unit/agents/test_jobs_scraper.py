@@ -57,7 +57,7 @@ class TestJobsScraperAgent:
         state.companies = [_make_company()]
 
         with (
-            patch("job_hunter_agents.agents.jobs_scraper.WebScraper") as mock_scraper_cls,
+            patch("job_hunter_agents.agents.jobs_scraper.create_page_scraper") as mock_scraper_cls,
             patch("job_hunter_agents.agents.base.AsyncAnthropic"),
             patch("job_hunter_agents.agents.base.instructor"),
         ):
@@ -83,7 +83,7 @@ class TestJobsScraperAgent:
         state.companies = [_make_company()]
 
         with (
-            patch("job_hunter_agents.agents.jobs_scraper.WebScraper") as mock_scraper_cls,
+            patch("job_hunter_agents.agents.jobs_scraper.create_page_scraper") as mock_scraper_cls,
             patch("job_hunter_agents.agents.base.AsyncAnthropic"),
             patch("job_hunter_agents.agents.base.instructor"),
         ):
@@ -112,7 +112,7 @@ class TestJobsScraperAgent:
         ]
 
         with (
-            patch("job_hunter_agents.agents.jobs_scraper.WebScraper") as mock_scraper_cls,
+            patch("job_hunter_agents.agents.jobs_scraper.create_page_scraper") as mock_scraper_cls,
             patch("job_hunter_agents.agents.base.AsyncAnthropic"),
             patch("job_hunter_agents.agents.base.instructor"),
         ):

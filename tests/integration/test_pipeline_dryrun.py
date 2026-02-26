@@ -42,7 +42,9 @@ def _make_settings(tmp_path: Path) -> MagicMock:
 class TestPipelineDryRun:
     """Full pipeline run with mocked externals, real state management."""
 
-    async def test_full_pipeline_success(self, dry_run_patches: ExitStack, tmp_path: Path) -> None:
+    async def test_full_pipeline_success(
+        self, dry_run_patches: ExitStack, pipeline_tracing: object, tmp_path: Path
+    ) -> None:
         """All 8 agents run, status is success, scored_jobs > 0."""
         settings = _make_settings(tmp_path)
         config = RunConfig(
@@ -60,7 +62,7 @@ class TestPipelineDryRun:
         assert result.companies_attempted > 0
 
     async def test_pipeline_generates_output_files(
-        self, dry_run_patches: ExitStack, tmp_path: Path
+        self, dry_run_patches: ExitStack, pipeline_tracing: object, tmp_path: Path
     ) -> None:
         """Pipeline produces CSV and XLSX output files."""
         settings = _make_settings(tmp_path)

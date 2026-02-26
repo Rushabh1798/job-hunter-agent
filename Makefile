@@ -3,7 +3,7 @@
 ARGS ?=
 QUEUE ?= default
 
-.PHONY: help install hooks dev dev-down dev-trace dev-temporal test test-int test-all lint format \
+.PHONY: help install hooks dev dev-down dev-trace dev-temporal test test-int test-int-real test-all lint format \
         run run-lite run-trace run-temporal worker \
         docker-build docker-run docker-run-lite clean clean-docker
 
@@ -51,6 +51,10 @@ test: ## Run unit tests
 test-int: ## Start infra and run integration tests (dry-run)
 	$(MAKE) dev
 	uv run pytest -m integration
+
+test-int-real: ## Start infra and run integration tests with real scraping (network required)
+	$(MAKE) dev
+	uv run pytest -m "integration and slow" -v
 
 test-e2e: ## Run e2e tests (requires API keys in .env)
 	uv run pytest -m "e2e or live" -v

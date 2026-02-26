@@ -44,7 +44,7 @@ jobs:
           --health-cmd "pg_isready -U postgres -d jobhunter"
           --health-interval 5s
           --health-timeout 3s
-          --health-retries 5
+          --health-retries 10
       redis:
         image: redis:7-alpine
         ports:
@@ -53,7 +53,7 @@ jobs:
           --health-cmd "redis-cli ping"
           --health-interval 5s
           --health-timeout 3s
-          --health-retries 5
+          --health-retries 10
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v4
@@ -66,6 +66,11 @@ jobs:
         run: uv sync --frozen --group dev
       - name: Install Playwright Chromium
         run: uv run playwright install chromium --with-deps
+      - name: Wait for service containers
+        run: |
+          timeout 60 bash -c 'until echo > /dev/tcp/localhost/5432 2>/dev/null; do sleep 2; done'
+          timeout 30 bash -c 'until echo > /dev/tcp/localhost/6379 2>/dev/null; do sleep 1; done'
+          echo "Services ready."
       - name: Run unit tests with coverage
         run: uv run pytest -m unit --cov=src --cov-report=xml --cov-report=html --cov-fail-under=85
       - name: Run integration tests
@@ -74,11 +79,15 @@ jobs:
         env:
           JH_ANTHROPIC_API_KEY: fake-key
           JH_TAVILY_API_KEY: fake-key
+          JH_DB_BACKEND: postgres
+          JH_POSTGRES_URL: postgresql+asyncpg://postgres:dev@localhost:5432/jobhunter
+          JH_CACHE_BACKEND: redis
+          JH_REDIS_URL: redis://localhost:6379/0
           PYTHONPATH: .
         run: >
           uv run job-hunter run tests/fixtures/sample_resume.pdf
           --prefs "Python backend remote roles at AI startups"
-          --dry-run --lite --company-limit 1
+          --dry-run --company-limit 1
       - name: E2E dry-run — Temporal pipeline (with fallback)
         env:
           JH_ANTHROPIC_API_KEY: fake-key
@@ -95,6 +104,12 @@ jobs:
           path: |
             coverage.xml
             htmlcov/
+      - name: Upload test output
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-output
+          path: output/
 
   docker:
     runs-on: ubuntu-latest

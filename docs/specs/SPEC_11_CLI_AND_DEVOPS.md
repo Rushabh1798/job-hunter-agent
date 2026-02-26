@@ -16,7 +16,7 @@ Composition root and development infrastructure: CLI entrypoint that wires setti
 | `.pre-commit-config.yaml` | pre-commit-hooks, ruff | 17 |
 | `pyproject.toml` | Dependencies, tool config | ~200 |
 | `.env.example` | 35+ env vars documented | 60 |
-| `tests/mocks/mock_settings.py` | `make_settings()` | 36 |
+| `tests/mocks/mock_settings.py` | `make_settings()`, `make_real_settings()` | 68 |
 | `tests/mocks/mock_factories.py` | 11 factory functions | 155 |
 | `tests/mocks/mock_llm.py` | `FakeInstructorClient`, `build_fake_response()` | 95 |
 | `tests/mocks/mock_tools.py` | 9 fake tool classes | 208 |
@@ -173,9 +173,24 @@ def make_settings(**overrides: object) -> MagicMock:
     settings.db_backend = "sqlite"
     settings.embedding_provider = "local"
     settings.cache_backend = "db"
+    settings.search_provider = "tavily"
     settings.otel_exporter = "none"
     settings.otel_endpoint = "http://localhost:4317"
     settings.otel_service_name = "job-hunter-test"
+```
+
+#### `make_real_settings()` (`tests/mocks/mock_settings.py`)
+
+Returns a real `Settings` instance pointing at test containers, for integration tests:
+
+```python
+def make_real_settings(tmp_path: Path, **overrides: object) -> Settings:
+    """Real Settings for integration tests — Postgres + Redis + DuckDuckGo."""
+    # search_provider = "duckduckgo" (free, no API key)
+    # db_backend = "postgres" -> localhost:5432
+    # cache_backend = "redis" -> localhost:6379/1
+    # embedding_provider = "local"
+    # anthropic_api_key / tavily_api_key = "fake-key" (LLM is mocked)
 ```
 
 #### Factory Functions (`tests/mocks/mock_factories.py`)

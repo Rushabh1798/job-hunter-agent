@@ -28,8 +28,12 @@ class Settings(BaseSettings):
     )
 
     # --- Search ---
+    search_provider: Literal["tavily", "duckduckgo"] = Field(
+        default="tavily",
+        description="Search provider: 'tavily' (production) or 'duckduckgo' (free, for testing)",
+    )
     tavily_api_key: SecretStr = Field(
-        description="Tavily API key for web search",
+        description="Tavily API key for web search (required when search_provider=tavily)",
     )
 
     # --- Database ---

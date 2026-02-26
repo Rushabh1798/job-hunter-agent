@@ -40,12 +40,17 @@ class TestActivateDryRunPatches:
             stack.close()
 
     def test_patches_web_search(self) -> None:
-        """WebSearchTool is replaced in company_finder module."""
+        """create_search_provider factory is replaced in company_finder module."""
+        from tests.mocks.mock_tools import FakeWebSearchTool
+
         stack = activate_dry_run_patches()
         try:
-            cls = _get_attr("job_hunter_agents.agents.company_finder", "WebSearchTool")
-            instance = cls()
-            assert hasattr(instance, "search")
+            factory = _get_attr(
+                "job_hunter_agents.agents.company_finder", "create_search_provider"
+            )
+            # Factory was patched to a lambda that returns FakeWebSearchTool()
+            instance = factory(None)
+            assert isinstance(instance, FakeWebSearchTool)
         finally:
             stack.close()
 
@@ -60,12 +65,17 @@ class TestActivateDryRunPatches:
             stack.close()
 
     def test_patches_web_scraper(self) -> None:
-        """WebScraper is replaced in jobs_scraper module."""
+        """create_page_scraper factory is replaced in jobs_scraper module."""
+        from tests.mocks.mock_tools import FakeWebScraper
+
         stack = activate_dry_run_patches()
         try:
-            cls = _get_attr("job_hunter_agents.agents.jobs_scraper", "WebScraper")
-            instance = cls()
-            assert hasattr(instance, "fetch_page")
+            factory = _get_attr(
+                "job_hunter_agents.agents.jobs_scraper", "create_page_scraper"
+            )
+            # Factory was patched to FakeWebScraper (callable class)
+            instance = factory()
+            assert isinstance(instance, FakeWebScraper)
         finally:
             stack.close()
 

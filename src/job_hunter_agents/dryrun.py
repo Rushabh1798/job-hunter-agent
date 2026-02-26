@@ -13,7 +13,7 @@ def activate_dry_run_patches() -> ExitStack:
     instantiate fakes instead of real clients. The caller must call
     ``stack.close()`` (or use ``with`` statement) when done.
 
-    Shared by both integration tests and CLI ``--dry-run``.
+    Shared by both CLI ``--dry-run`` and pipeline-logic integration tests.
     """
     # Lazy import to avoid circular deps and test-only deps in production
     from tests.mocks.mock_llm import FakeInstructorClient
@@ -38,11 +38,11 @@ def activate_dry_run_patches() -> ExitStack:
         )
     )
 
-    # --- Company finder: WebSearchTool + ATS clients ---
+    # --- Company finder: search via factory, ATS clients direct ---
     stack.enter_context(
         patch(
-            "job_hunter_agents.agents.company_finder.WebSearchTool",
-            FakeWebSearchTool,
+            "job_hunter_agents.agents.company_finder.create_search_provider",
+            lambda settings: FakeWebSearchTool(),
         )
     )
     stack.enter_context(
@@ -70,7 +70,7 @@ def activate_dry_run_patches() -> ExitStack:
         )
     )
 
-    # --- Jobs scraper: ATS clients + WebScraper ---
+    # --- Jobs scraper: ATS clients + scraper via factory ---
     stack.enter_context(
         patch(
             "job_hunter_agents.agents.jobs_scraper.GreenhouseClient",
@@ -97,7 +97,7 @@ def activate_dry_run_patches() -> ExitStack:
     )
     stack.enter_context(
         patch(
-            "job_hunter_agents.agents.jobs_scraper.WebScraper",
+            "job_hunter_agents.agents.jobs_scraper.create_page_scraper",
             FakeWebScraper,
         )
     )
@@ -120,6 +120,59 @@ def activate_dry_run_patches() -> ExitStack:
     )
 
     # Make instructor.from_anthropic() return FakeInstructorClient
+    fake_instructor = MagicMock()
+    fake_instructor.from_anthropic.return_value = FakeInstructorClient()
+    stack.enter_context(
+        patch(
+            "job_hunter_agents.agents.base.instructor",
+            fake_instructor,
+        )
+    )
+
+    return stack
+
+
+def activate_integration_patches() -> ExitStack:
+    """Activate minimal patches for integration tests — LLM + email + PDF only.
+
+    Integration tests use real search (DuckDuckGo via settings), real scraping
+    (crawl4ai), and real ATS clients (public APIs). Only the LLM, email, and
+    PDF parser are mocked.
+
+    The caller must call ``stack.close()`` (or use ``with`` statement).
+    """
+    from tests.mocks.mock_llm import FakeInstructorClient
+    from tests.mocks.mock_tools import (
+        FakeEmailSender,
+        FakePDFParser,
+    )
+
+    stack = ExitStack()
+
+    # --- Resume parser: PDFParser ---
+    stack.enter_context(
+        patch(
+            "job_hunter_agents.agents.resume_parser.PDFParser",
+            FakePDFParser,
+        )
+    )
+
+    # --- Notifier: EmailSender ---
+    stack.enter_context(
+        patch(
+            "job_hunter_agents.agents.notifier.EmailSender",
+            FakeEmailSender,
+        )
+    )
+
+    # --- Base agent: AsyncAnthropic + instructor ---
+    stack.enter_context(
+        patch(
+            "job_hunter_agents.agents.base.AsyncAnthropic",
+            MagicMock,
+        )
+    )
+
     fake_instructor = MagicMock()
     fake_instructor.from_anthropic.return_value = FakeInstructorClient()
     stack.enter_context(

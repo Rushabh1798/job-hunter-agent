@@ -12,7 +12,7 @@ from job_hunter_agents.tools.ats_clients.ashby import AshbyClient
 from job_hunter_agents.tools.ats_clients.greenhouse import GreenhouseClient
 from job_hunter_agents.tools.ats_clients.lever import LeverClient
 from job_hunter_agents.tools.ats_clients.workday import WorkdayClient
-from job_hunter_agents.tools.browser import WebScraper
+from job_hunter_agents.tools.factories import create_page_scraper
 from job_hunter_core.models.company import ATSType, Company
 from job_hunter_core.models.job import RawJob
 from job_hunter_core.state import PipelineState
@@ -101,7 +101,7 @@ class JobsScraperAgent(BaseAgent):
 
     async def _scrape_via_crawler(self, company: Company, career_url: str) -> list[RawJob]:
         """Scrape via web crawler."""
-        scraper = WebScraper()
+        scraper = create_page_scraper()
         content = await scraper.fetch_page(career_url)
 
         return [

@@ -16,6 +16,8 @@ Foundation layer (`job_hunter_core`) containing all domain models, configuration
 | `src/job_hunter_core/state.py` | `PipelineState` | 158 |
 | `src/job_hunter_core/interfaces/cache.py` | `CacheClient` (Protocol) | 27 |
 | `src/job_hunter_core/interfaces/embedder.py` | `EmbedderBase` (Protocol) | 19 |
+| `src/job_hunter_core/interfaces/search.py` | `SearchProvider` (Protocol), `SearchResult` | 42 |
+| `src/job_hunter_core/interfaces/scraper.py` | `PageScraper` (Protocol) | 30 |
 | `src/job_hunter_core/interfaces/repository.py` | `BaseRepository[T]` (Protocol) | 30 |
 | `src/job_hunter_core/constants.py` | `TOKEN_PRICES`, `SCORING_WEIGHTS`, `COMMON_CAREER_PATHS`, etc. | 56 |
 | `src/job_hunter_core/exceptions.py` | `JobHunterError` + 9 subclasses | 48 |
@@ -36,6 +38,7 @@ class Settings(BaseSettings):
 
 **Search:**
 - `tavily_api_key: SecretStr` — required
+- `search_provider: Literal["tavily", "duckduckgo"] = "tavily"` — search backend selection; `"duckduckgo"` is free (no API key) and used in integration tests
 
 **Database:**
 - `db_backend: Literal["postgres", "sqlite"] = "sqlite"`
@@ -341,6 +344,20 @@ class CacheClient(Protocol):
 class EmbedderBase(Protocol):
     async def embed_text(self, text: str) -> list[float]: ...
     async def embed_batch(self, texts: list[str]) -> list[list[float]]: ...
+
+# interfaces/search.py
+@runtime_checkable
+class SearchProvider(Protocol):
+    async def search(self, query: str, max_results: int = 5) -> list[SearchResult]: ...
+    async def find_career_page(self, company_name: str) -> str | None: ...
+    async def search_jobs_on_site(self, domain: str, role_query: str, max_results: int = 10) -> list[SearchResult]: ...
+
+# interfaces/scraper.py
+@runtime_checkable
+class PageScraper(Protocol):
+    async def fetch_page(self, url: str) -> str: ...
+    async def fetch_page_playwright(self, url: str) -> str: ...
+    async def fetch_json_api(self, url: str, headers: dict[str, str] | None = None) -> dict[str, Any]: ...
 
 # interfaces/repository.py
 @runtime_checkable

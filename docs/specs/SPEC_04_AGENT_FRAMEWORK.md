@@ -11,7 +11,7 @@ Defines the agent execution framework: the `BaseAgent` abstract class with LLM i
 | `src/job_hunter_agents/agents/base.py` | `BaseAgent` (ABC) | 163 |
 | `src/job_hunter_agents/orchestrator/pipeline.py` | `Pipeline`, `PIPELINE_STEPS` | 202 |
 | `src/job_hunter_agents/orchestrator/checkpoint.py` | `save_checkpoint()`, `load_latest_checkpoint()` | 61 |
-| `src/job_hunter_agents/dryrun.py` | `activate_dry_run_patches()` | 132 |
+| `src/job_hunter_agents/dryrun.py` | `activate_dry_run_patches()`, `activate_integration_patches()` | 175 |
 | `src/job_hunter_agents/orchestrator/temporal_client.py` | `create_temporal_client()`, `check_temporal_available()` | 87 |
 | `src/job_hunter_agents/orchestrator/temporal_payloads.py` | `WorkflowInput`, `WorkflowOutput`, `StepInput`, `StepResult`, `ScrapeCompanyInput`, `ScrapeCompanyResult` | 77 |
 | `src/job_hunter_agents/orchestrator/temporal_workflow.py` | `JobHuntWorkflow` | 255 |
@@ -358,7 +358,7 @@ This function is shared by:
 | # | Patch Target | Fake Replacement | Source Module | Purpose |
 |---|-------------|-----------------|---------------|---------|
 | 1 | `job_hunter_agents.agents.resume_parser.PDFParser` | `FakePDFParser` | `tests/mocks/mock_tools.py` | Returns fixture resume text from `tests/fixtures/resume_text.txt` |
-| 2 | `job_hunter_agents.agents.company_finder.WebSearchTool` | `FakeWebSearchTool` | `tests/mocks/mock_tools.py` | Returns fixture search results from `tests/fixtures/search_results/career_page_search.json` |
+| 2 | `job_hunter_agents.tools.factories.create_search_provider` | `FakeWebSearchTool` (via lambda) | `tests/mocks/mock_tools.py` | Factory returns fake search tool with fixture search results from `tests/fixtures/search_results/career_page_search.json` |
 | 3 | `job_hunter_agents.agents.company_finder.GreenhouseClient` | `FakeGreenhouseClient` | `tests/mocks/mock_tools.py` | Detection via real regex; returns fixture jobs from `tests/fixtures/ats_responses/greenhouse_jobs.json` |
 | 4 | `job_hunter_agents.agents.company_finder.LeverClient` | `FakeLeverClient` | `tests/mocks/mock_tools.py` | Detection via real regex; returns fixture jobs from `tests/fixtures/ats_responses/lever_jobs.json` |
 | 5 | `job_hunter_agents.agents.company_finder.AshbyClient` | `FakeAshbyClient` | `tests/mocks/mock_tools.py` | Detection via real regex; returns fixture jobs from `tests/fixtures/ats_responses/ashby_jobs.json` |
@@ -367,7 +367,7 @@ This function is shared by:
 | 8 | `job_hunter_agents.agents.jobs_scraper.LeverClient` | `FakeLeverClient` | `tests/mocks/mock_tools.py` | Same fake as #4, patched at scraper import location |
 | 9 | `job_hunter_agents.agents.jobs_scraper.AshbyClient` | `FakeAshbyClient` | `tests/mocks/mock_tools.py` | Same fake as #5, patched at scraper import location |
 | 10 | `job_hunter_agents.agents.jobs_scraper.WorkdayClient` | `FakeWorkdayClient` | `tests/mocks/mock_tools.py` | Same fake as #6, patched at scraper import location |
-| 11 | `job_hunter_agents.agents.jobs_scraper.WebScraper` | `FakeWebScraper` | `tests/mocks/mock_tools.py` | Returns fixture HTML from `tests/fixtures/html/career_page.html` |
+| 11 | `job_hunter_agents.tools.factories.create_page_scraper` | `FakeWebScraper` (via lambda) | `tests/mocks/mock_tools.py` | Factory returns fake scraper with fixture HTML from `tests/fixtures/html/career_page.html` |
 | 12 | `job_hunter_agents.agents.notifier.EmailSender` | `FakeEmailSender` | `tests/mocks/mock_tools.py` | Records calls for assertion; returns `True` without sending |
 | 13 | `job_hunter_agents.agents.base.AsyncAnthropic` | `MagicMock` | `unittest.mock` | Prevents real Anthropic API client creation |
 | 14 | `job_hunter_agents.agents.base.instructor` | `MagicMock` (configured) | `unittest.mock` + `tests/mocks/mock_llm.py` | `instructor.from_anthropic()` returns `FakeInstructorClient` |
@@ -387,6 +387,23 @@ Each fixture file has a `_meta` object (with `input_tokens` and `output_tokens`)
 **ATS client fakes:** The four ATS fakes (`FakeGreenhouseClient`, `FakeLeverClient`, `FakeAshbyClient`, `FakeWorkdayClient`) use **real regex detection logic** in their `detect()` methods. This means the dry-run exercises the same ATS detection code path as production -- only the `fetch_jobs()` method returns fixture data instead of making HTTP calls.
 
 **Note on duplicate patches:** ATS clients are patched at two import locations each (once in `company_finder`, once in `jobs_scraper`) because Python's `unittest.mock.patch()` patches the name at the import site, not at the definition site. Both agents import these clients independently.
+
+#### `activate_integration_patches()` -- Integration Test Patches
+
+```python
+def activate_integration_patches() -> ExitStack
+```
+
+A lighter patching function for integration tests. Mocks ONLY the LLM, PDF parser, and email sender — leaving search (DuckDuckGo), scraper (crawl4ai), ATS clients (real public APIs), database, and cache as real services.
+
+| # | Patch Target | Fake Replacement | Purpose |
+|---|-------------|-----------------|---------|
+| 1 | `job_hunter_agents.agents.base.AsyncAnthropic` | `MagicMock` | Prevents real Anthropic API client creation |
+| 2 | `job_hunter_agents.agents.base.instructor` | `FakeInstructorClient` | Returns fixture LLM responses |
+| 3 | `job_hunter_agents.agents.resume_parser.PDFParser` | `FakePDFParser` | Returns fixture resume text |
+| 4 | `job_hunter_agents.agents.notifier.EmailSender` | `FakeEmailSender` | Records calls without sending |
+
+This function is used by the `integration_patches` pytest fixture in `tests/integration/conftest.py` for tests that exercise real search and scraping infrastructure.
 
 ---
 
@@ -988,7 +1005,7 @@ This activates all 14 patches from `activate_dry_run_patches()`, runs the full 8
 
 | Module | Exports | Purpose |
 |--------|---------|---------|
-| `tests/mocks/mock_settings.py` | `make_settings(**overrides)` | Factory for `MagicMock` `Settings` with sensible defaults |
+| `tests/mocks/mock_settings.py` | `make_settings(**overrides)`, `make_real_settings(tmp_path, **overrides)` | Factory for `MagicMock` Settings (unit tests) and real `Settings` (integration tests) |
 | `tests/mocks/mock_factories.py` | `make_pipeline_state()`, `make_run_config()`, etc. | Factory functions for domain model instances |
 | `tests/mocks/mock_llm.py` | `FakeInstructorClient`, `build_fake_response()` | Fixture-based LLM response simulation |
 | `tests/mocks/mock_tools.py` | `FakePDFParser`, `FakeWebSearchTool`, `FakeWebScraper`, `Fake*Client`, `FakeEmailSender`, `FakeEmbedder` | Named fake tool implementations |

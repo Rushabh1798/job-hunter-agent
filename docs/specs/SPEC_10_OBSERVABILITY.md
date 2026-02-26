@@ -8,10 +8,11 @@ This spec covers the observability subsystem: structured logging, distributed tr
 
 | File | Role |
 |------|------|
-| `src/job_hunter_agents/observability/__init__.py` | Re-exports all public symbols from the three submodules |
+| `src/job_hunter_agents/observability/__init__.py` | Re-exports all public symbols from the four submodules |
 | `src/job_hunter_agents/observability/logging.py` | `configure_logging`, `bind_run_context`, `clear_run_context` |
 | `src/job_hunter_agents/observability/tracing.py` | OTEL tracing setup, `traced_agent` decorator, `trace_pipeline_run` context manager |
 | `src/job_hunter_agents/observability/cost_tracker.py` | `LLMCallMetrics`, `CostTracker`, `extract_token_usage` |
+| `src/job_hunter_agents/observability/run_report.py` | `RunReport`, `AgentStep`, `MOCK_MANIFESTS`, `generate_run_report()`, `format_run_report()` |
 | `src/job_hunter_agents/agents/base.py` | Integrates cost tracking via `_track_cost()` and `extract_token_usage()` in `_call_llm()` |
 | `src/job_hunter_agents/orchestrator/pipeline.py` | Integrates all three: `bind_run_context`/`clear_run_context`, `trace_pipeline_run`, `get_tracer`, `_log_cost_summary` |
 | `src/job_hunter_core/config/settings.py` | Observability-related settings fields |
@@ -20,6 +21,7 @@ This spec covers the observability subsystem: structured logging, distributed tr
 | `tests/unit/observability/test_logging.py` | Unit tests for logging configuration |
 | `tests/unit/observability/test_tracing.py` | Unit tests for tracing setup and decorators |
 | `tests/unit/observability/test_cost_tracker.py` | Unit tests for cost tracking and token extraction |
+| `tests/unit/observability/test_run_report.py` | Unit tests for run report generation and formatting |
 | `tests/integration/test_pipeline_tracing.py` | Integration tests for end-to-end OTEL spans |
 
 ## Public API
@@ -286,6 +288,59 @@ def extract_token_usage(response: object) -> tuple[int, int]:
     """
 ```
 
+### Run Report — `src/job_hunter_agents/observability/run_report.py`
+
+Generates a human-readable run report from OTEL spans, showing which components were real vs mocked, agent execution timing, and flow linkage. Primarily used in integration/e2e tests via the `pipeline_tracing` fixture.
+
+```python
+MOCK_MANIFESTS: dict[str, dict[str, str]]
+# Maps mock mode ("dry_run", "integration", "live") to component status dicts.
+# Each component is "mocked" or "real (description)".
+
+@dataclass
+class AgentStep:
+    order: int
+    name: str
+    duration_ms: float
+    status: str        # "ok" or "error"
+    tokens: int
+    error: str | None
+
+@dataclass
+class RunReport:
+    run_id: str
+    pipeline_status: str
+    total_duration_ms: float
+    total_tokens: int
+    total_cost_usd: float
+    jobs_scored: int
+    error_count: int
+    mock_mode: str
+    component_manifest: dict[str, str]
+    agent_steps: list[AgentStep] = field(default_factory=list)
+
+def generate_run_report(spans: list[Any], mock_mode: str = "dry_run") -> RunReport:
+    """Build RunReport from finished OTEL spans.
+    Finds the root 'pipeline.run' span for summary metrics,
+    extracts 'agent.*' child spans for per-agent timing."""
+
+def format_run_report(report: RunReport) -> str:
+    """Format RunReport as a human-readable string with sections:
+    pipeline summary, component status (MOCK/REAL), agent flow, errors."""
+```
+
+**Mock manifests:**
+
+| Mode | LLM | PDF Parser | Search | Scraper | ATS | Email | DB | Cache |
+|------|-----|-----------|--------|---------|-----|-------|-----|-------|
+| `dry_run` | mocked | mocked | mocked | mocked | mocked | mocked | real (settings) | real (settings) |
+| `integration` | mocked | mocked | real (DDG) | real | real (APIs) | mocked | real (Postgres) | real (Redis) |
+| `live` | real | real | real (Tavily) | real | real | real | real | real |
+
+**Used by:** `pipeline_tracing` fixture in `tests/integration/conftest.py` — auto-detects mock mode from active fixtures, collects spans from `InMemorySpanExporter`, and prints the formatted report after each test.
+
+---
+
 #### Token Pricing Table (`src/job_hunter_core/constants.py`)
 
 ```python
@@ -498,6 +553,7 @@ JH_WARN_COST_THRESHOLD_USD=5.0
 | `tests/unit/observability/test_logging.py` | `@pytest.mark.unit` | 5 tests |
 | `tests/unit/observability/test_tracing.py` | `@pytest.mark.unit` | 8 tests |
 | `tests/unit/observability/test_cost_tracker.py` | `@pytest.mark.unit` | 8 tests |
+| `tests/unit/observability/test_run_report.py` | `@pytest.mark.unit` | 9 tests |
 | `tests/integration/test_pipeline_tracing.py` | `@pytest.mark.integration` | 4 tests |
 
 ### Unit Test Details
@@ -543,6 +599,19 @@ JH_WARN_COST_THRESHOLD_USD=5.0
   - `test_extract_no_raw_response` — returns (0, 0) when `_raw_response` is missing
   - `test_extract_no_usage` — returns (0, 0) when `usage` attribute is missing
 
+**test_run_report.py:**
+- `TestGenerateRunReport`:
+  - `test_empty_spans_returns_defaults` — empty span list produces zeroed report
+  - `test_root_span_attributes_extracted` — pipeline attributes (run_id, status, tokens, cost, jobs, errors) extracted from root span
+  - `test_agent_spans_sorted_by_start_time` — agent steps appear in execution order
+  - `test_agent_error_captured` — error attribute on agent span captured in AgentStep
+  - `test_integration_mode_manifest` — integration mode uses correct component manifest
+  - `test_live_mode_manifest` — live mode uses correct component manifest
+- `TestFormatRunReport`:
+  - `test_format_contains_sections` — formatted output contains all section headers
+  - `test_format_contains_error_details` — error info appears in formatted output
+  - `test_format_empty_steps` — handles report with no agent steps
+
 ### Integration Test Details
 
 **test_pipeline_tracing.py:**
@@ -553,6 +622,10 @@ Uses `InMemorySpanExporter` via a `span_exporter` fixture that calls `configure_
 - `test_root_span_has_summary_attributes` — root span has `pipeline.run_id` and `pipeline.status` attributes
 - `test_agent_spans_have_status_attributes` — all `agent.*` spans have `agent.name` and `agent.status` attributes
 - `test_tracing_disabled_produces_no_spans` — pipeline with tracing disabled produces zero spans in a fresh `InMemorySpanExporter`
+
+**pipeline_tracing fixture (`tests/integration/conftest.py`):**
+
+Used by `test_pipeline_dryrun.py` and `test_pipeline_real_scraping.py` to enable OTEL tracing with `InMemorySpanExporter` and auto-generate a run report after each test. Auto-detects mock mode by checking `request.fixturenames` for `integration_patches` or `dry_run_patches`.
 
 ### How to Run
 ```bash

@@ -1,9 +1,13 @@
-"""Shared mock Settings factory."""
+"""Shared mock Settings factory and real Settings factory for integration tests."""
 
 from __future__ import annotations
 
 from pathlib import Path
+from typing import TYPE_CHECKING
 from unittest.mock import MagicMock
+
+if TYPE_CHECKING:
+    from job_hunter_core.config.settings import Settings
 
 
 def make_settings(**overrides: object) -> MagicMock:
@@ -33,3 +37,31 @@ def make_settings(**overrides: object) -> MagicMock:
         setattr(settings, key, value)
 
     return settings
+
+
+def make_real_settings(tmp_path: Path, **overrides: object) -> Settings:
+    """Create a real Settings instance for integration tests.
+
+    Points at test Postgres + Redis containers. LLM and search are
+    configured for testing (LLM is mocked via patches, search uses
+    DuckDuckGo which requires no API key).
+    """
+    from job_hunter_core.config.settings import Settings as _Settings
+
+    defaults: dict[str, object] = {
+        "anthropic_api_key": "fake-key",
+        "tavily_api_key": "fake-key",
+        "search_provider": "duckduckgo",
+        "db_backend": "postgres",
+        "postgres_url": "postgresql+asyncpg://postgres:dev@localhost:5432/jobhunter_test",
+        "cache_backend": "redis",
+        "redis_url": "redis://localhost:6379/1",
+        "embedding_provider": "local",
+        "output_dir": tmp_path / "output",
+        "checkpoint_dir": tmp_path / "checkpoints",
+        "checkpoint_enabled": True,
+        "min_score_threshold": 0,
+        "max_concurrent_scrapers": 2,
+    }
+    defaults.update(overrides)
+    return _Settings(**defaults)  # type: ignore[arg-type]

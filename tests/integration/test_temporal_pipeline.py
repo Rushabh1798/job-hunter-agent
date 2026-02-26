@@ -251,6 +251,7 @@ def test_cli_temporal_flag_errors_without_server() -> None:
         env={
             "JH_ANTHROPIC_API_KEY": "fake-key",
             "JH_TAVILY_API_KEY": "fake-key",
+            "JH_TEMPORAL_ADDRESS": "localhost:19999",
         },
     )
     assert result.exit_code == 1, f"Expected exit code 1, got {result.exit_code}: {result.output}"

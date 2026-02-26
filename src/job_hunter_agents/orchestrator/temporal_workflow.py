@@ -115,6 +115,7 @@ class JobHuntWorkflow:
             task_queue=task_queue,
             start_to_close_timeout=timedelta(minutes=minutes),
             retry_policy=retry_policy,
+            result_type=StepResult,
         )
         return result.state_snapshot, result.tokens_used, result.cost_usd
 
@@ -137,6 +138,7 @@ class JobHuntWorkflow:
                 task_queue=input.scraping_queue,
                 start_to_close_timeout=timedelta(minutes=3),
                 retry_policy=_DEFAULT_RETRY,
+                result_type=ScrapeCompanyResult,
             )
             for c in companies
         ]

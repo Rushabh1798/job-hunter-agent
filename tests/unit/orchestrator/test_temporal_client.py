@@ -34,12 +34,12 @@ async def test_create_client_plain_tcp(temporal_settings: MagicMock) -> None:
 
         client = await create_temporal_client(temporal_settings)
         assert client is mock_client
-        connect.assert_awaited_once_with(
-            "localhost:7233",
-            namespace="default",
-            tls=False,
-            rpc_metadata={},
-        )
+        call_kwargs = connect.call_args.kwargs
+        assert connect.call_args.args == ("localhost:7233",)
+        assert call_kwargs["namespace"] == "default"
+        assert call_kwargs["tls"] is False
+        assert call_kwargs["rpc_metadata"] == {}
+        assert call_kwargs["data_converter"] is not None
 
 
 @pytest.mark.asyncio

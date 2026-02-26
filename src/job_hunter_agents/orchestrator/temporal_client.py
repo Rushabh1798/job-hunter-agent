@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 
 import structlog
 from temporalio.client import Client, TLSConfig
+from temporalio.contrib.pydantic import pydantic_data_converter
 
 from job_hunter_core.exceptions import TemporalConnectionError
 
@@ -35,6 +36,7 @@ async def create_temporal_client(settings: Settings) -> Client:
             namespace=settings.temporal_namespace,
             tls=tls_config,
             rpc_metadata=rpc_metadata,
+            data_converter=pydantic_data_converter,
         )
         logger.info(
             "temporal_connected",

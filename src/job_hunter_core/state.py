@@ -52,6 +52,9 @@ class PipelineState:
             "errors": [json.loads(e.model_dump_json()) for e in self.errors],
             "total_tokens": self.total_tokens,
             "total_cost_usd": self.total_cost_usd,
+            "run_result": (
+                json.loads(self.run_result.model_dump_json()) if self.run_result else None
+            ),
         }
         return PipelineCheckpoint(
             run_id=self.config.run_id,
@@ -105,6 +108,10 @@ class PipelineState:
         cost = snap.get("total_cost_usd")
         if isinstance(cost, (int, float)):
             state.total_cost_usd = float(cost)
+
+        run_result_data = snap.get("run_result")
+        if isinstance(run_result_data, dict):
+            state.run_result = RunResult(**run_result_data)
 
         return state
 

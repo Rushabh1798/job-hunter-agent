@@ -83,7 +83,7 @@ jobs:
           timeout 120 bash -c 'until echo > /dev/tcp/localhost/7233 2>/dev/null; do sleep 3; done'
           echo "Services ready (postgres:5432, redis:6379, temporal:7233)."
       - name: Run unit tests with coverage
-        run: uv run pytest -m unit --cov=src --cov-report=xml --cov-report=html --cov-fail-under=85
+        run: uv run pytest -m unit --cov=src --cov-report=xml --cov-report=html --cov-fail-under=90
       - name: Run integration tests
         run: uv run pytest -m integration -v
       - name: E2E dry-run — checkpoint pipeline

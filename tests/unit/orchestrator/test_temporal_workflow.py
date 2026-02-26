@@ -209,6 +209,64 @@ class TestScrapeParallel:
         assert cost == pytest.approx(0.03)
         assert len(snapshot["errors"]) == 1
 
+    @pytest.mark.asyncio
+    async def test_partial_failure_preserves_successful_results(self) -> None:
+        """One failed scrape doesn't lose successful results."""
+        wf = JobHuntWorkflow()
+        wf_input = _make_workflow_input()
+        snapshot = _make_snapshot(
+            companies=[
+                {"name": "GoodCo", "career_url": "https://good.com"},
+                {"name": "BadCo", "career_url": "https://bad.com"},
+            ],
+            config={"run_id": "test"},
+        )
+
+        result_ok = ScrapeCompanyResult(
+            raw_jobs=[{"title": "Job1", "company_id": "1"}],
+            tokens_used=100,
+            cost_usd=0.01,
+            errors=[],
+        )
+        error = RuntimeError("connection refused")
+
+        with patch("job_hunter_agents.orchestrator.temporal_workflow.workflow") as mock_wf:
+            mock_wf.execute_activity = AsyncMock(side_effect=[result_ok, error])
+
+            tokens, cost = await wf._scrape_parallel(snapshot, wf_input)
+
+        # Successful results preserved
+        assert len(snapshot["raw_jobs"]) == 1
+        assert snapshot["raw_jobs"][0]["title"] == "Job1"
+        # Error recorded for failed company
+        assert len(snapshot["errors"]) == 1
+        assert "BadCo" in snapshot["errors"][0]["message"]
+        # Only tokens/cost from successful scrape counted
+        assert tokens == 100
+        assert cost == pytest.approx(0.01)
+
+    @pytest.mark.asyncio
+    async def test_all_scrapes_fail_returns_zero(self) -> None:
+        """All scrapes failing returns zero tokens/cost with errors."""
+        wf = JobHuntWorkflow()
+        wf_input = _make_workflow_input()
+        snapshot = _make_snapshot(
+            companies=[{"name": "Co1"}, {"name": "Co2"}],
+            config={"run_id": "test"},
+        )
+
+        with patch("job_hunter_agents.orchestrator.temporal_workflow.workflow") as mock_wf:
+            mock_wf.execute_activity = AsyncMock(
+                side_effect=[RuntimeError("fail1"), RuntimeError("fail2")]
+            )
+
+            tokens, cost = await wf._scrape_parallel(snapshot, wf_input)
+
+        assert tokens == 0
+        assert cost == 0.0
+        assert len(snapshot["errors"]) == 2
+        assert snapshot["raw_jobs"] == []
+
 
 class TestRunAndExtract:
     """Tests for _run_and_extract."""

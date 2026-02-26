@@ -27,7 +27,7 @@ repos:
 
       - id: unit-tests-coverage
         name: unit tests with coverage
-        entry: uv run pytest -m unit --cov=src --cov-fail-under=85 -q --tb=short
+        entry: uv run pytest -m unit --cov=src --cov-fail-under=90 -q --tb=short
         language: system
         pass_filenames: false
         always_run: true

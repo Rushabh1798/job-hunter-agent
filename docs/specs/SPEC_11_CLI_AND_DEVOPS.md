@@ -136,7 +136,7 @@ async def _run_pipeline(settings: Settings, config: RunConfig) -> RunResult
 | Job | Steps | Depends On |
 |-----|-------|-----------|
 | `lint` | checkout, setup-uv, setup-python 3.12, `uv sync`, ruff check, ruff format --check, mypy | — |
-| `test` | checkout, setup-uv, setup-python 3.12, `uv sync`, playwright install, `pytest -m unit --cov --cov-fail-under=80`, upload coverage | — |
+| `test` | checkout, setup-uv, setup-python 3.12, `uv sync`, playwright install, `pytest -m unit --cov --cov-fail-under=90`, upload coverage | — |
 | `docker` | checkout, `docker build` | lint + test |
 
 ### Pre-commit Hooks (`.pre-commit-config.yaml`)

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Pre-commit hook: mirrors CI lint + test jobs (minus infra-dependent steps).
-# Runs: ruff check, ruff format, mypy, unit tests with 85% coverage gate.
+# Runs: ruff check, ruff format, mypy, unit tests with 90% coverage gate.
 # Install via: make hooks
 set -euo pipefail
 
@@ -13,7 +13,7 @@ uv run ruff format --check .
 echo "=== Pre-commit: Mypy ==="
 uv run mypy .
 
-echo "=== Pre-commit: Unit tests (coverage >= 85%) ==="
-uv run pytest -m unit --cov=src --cov-fail-under=85 -q --tb=short
+echo "=== Pre-commit: Unit tests (coverage >= 90%) ==="
+uv run pytest -m unit --cov=src --cov-fail-under=90 -q --tb=short
 
 echo "=== All pre-commit checks passed ==="

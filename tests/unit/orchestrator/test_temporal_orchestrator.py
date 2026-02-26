@@ -122,3 +122,116 @@ async def test_to_run_result_converts_output(temporal_settings: MagicMock) -> No
     assert result.output_files == [Path("/output/results.csv")]
     assert result.email_sent is True
     assert result.estimated_cost_usd == 0.50
+
+
+@pytest.mark.asyncio
+async def test_run_with_embedded_worker(temporal_settings: MagicMock) -> None:
+    """Embedded worker mode starts workers alongside workflow execution."""
+    temporal_settings.temporal_embedded_worker = True
+    temporal_settings.temporal_task_queue = "test-q"
+    temporal_settings.temporal_llm_task_queue = "test-q"
+    temporal_settings.temporal_scraping_task_queue = "test-q"
+
+    mock_client = AsyncMock()
+    mock_client.execute_workflow = AsyncMock(return_value=_make_workflow_output())
+
+    with (
+        patch(
+            "job_hunter_agents.orchestrator.temporal_orchestrator.create_temporal_client",
+            return_value=mock_client,
+        ),
+        patch(
+            "temporalio.worker.Worker",
+        ) as mock_worker_cls,
+        patch(
+            "job_hunter_agents.orchestrator.temporal_activities.set_settings_override",
+        ) as mock_set_override,
+    ):
+        mock_worker = AsyncMock()
+        mock_worker.__aenter__ = AsyncMock(return_value=mock_worker)
+        mock_worker.__aexit__ = AsyncMock(return_value=False)
+        mock_worker_cls.return_value = mock_worker
+
+        from job_hunter_agents.orchestrator.temporal_orchestrator import TemporalOrchestrator
+
+        orchestrator = TemporalOrchestrator(temporal_settings)
+        result = await orchestrator.run(_make_run_config())
+
+        assert result.status == "success"
+        # Worker was created for the single deduplicated queue
+        mock_worker_cls.assert_called_once()
+        # Settings override was set then cleared
+        assert mock_set_override.call_count == 2
+        mock_set_override.assert_any_call(temporal_settings)
+        mock_set_override.assert_any_call(None)
+
+
+@pytest.mark.asyncio
+async def test_embedded_worker_deduplicates_queues(temporal_settings: MagicMock) -> None:
+    """When all queues are the same, only one worker is created."""
+    temporal_settings.temporal_embedded_worker = True
+    temporal_settings.temporal_task_queue = "same-q"
+    temporal_settings.temporal_llm_task_queue = "same-q"
+    temporal_settings.temporal_scraping_task_queue = "same-q"
+
+    mock_client = AsyncMock()
+    mock_client.execute_workflow = AsyncMock(return_value=_make_workflow_output())
+
+    with (
+        patch(
+            "job_hunter_agents.orchestrator.temporal_orchestrator.create_temporal_client",
+            return_value=mock_client,
+        ),
+        patch(
+            "temporalio.worker.Worker",
+        ) as mock_worker_cls,
+        patch(
+            "job_hunter_agents.orchestrator.temporal_activities.set_settings_override",
+        ),
+    ):
+        mock_worker = AsyncMock()
+        mock_worker.__aenter__ = AsyncMock(return_value=mock_worker)
+        mock_worker.__aexit__ = AsyncMock(return_value=False)
+        mock_worker_cls.return_value = mock_worker
+
+        from job_hunter_agents.orchestrator.temporal_orchestrator import TemporalOrchestrator
+
+        orchestrator = TemporalOrchestrator(temporal_settings)
+        await orchestrator.run(_make_run_config())
+
+        # Only 1 worker for the single unique queue
+        assert mock_worker_cls.call_count == 1
+
+
+@pytest.mark.asyncio
+async def test_to_run_result_handles_non_dict_errors() -> None:
+    """Non-dict errors from Temporal deserialization are logged and skipped."""
+    from job_hunter_agents.orchestrator.temporal_orchestrator import TemporalOrchestrator
+
+    # Simulate Temporal returning bad data by constructing output then mutating
+    output = WorkflowOutput(
+        status="partial",
+        errors=[
+            {"agent_name": "scraper", "error_type": "TimeoutError", "error_message": "timeout"},
+        ],
+    )
+    # Simulate Temporal deserialization bug: non-dict entries sneak in
+    output.errors.extend(["string_error", 42])  # type: ignore[list-item]
+
+    result = TemporalOrchestrator._to_run_result(output, "test_run")
+
+    # Only the valid dict error is included; non-dicts are logged and skipped
+    assert len(result.errors) == 1
+    assert result.errors[0].agent_name == "scraper"
+
+
+@pytest.mark.asyncio
+async def test_to_run_result_empty_errors() -> None:
+    """Empty errors list converts cleanly."""
+    from job_hunter_agents.orchestrator.temporal_orchestrator import TemporalOrchestrator
+
+    output = WorkflowOutput(status="success", errors=[])
+    result = TemporalOrchestrator._to_run_result(output, "test_run")
+
+    assert result.errors == []
+    assert result.status == "success"

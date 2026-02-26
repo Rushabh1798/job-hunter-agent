@@ -142,13 +142,24 @@ class JobHuntWorkflow:
             )
             for c in companies
         ]
-        results: list[ScrapeCompanyResult] = await asyncio.gather(*tasks)
+        raw_results = await asyncio.gather(*tasks, return_exceptions=True)
 
         all_raw_jobs: list[dict[str, Any]] = []
         all_errors: list[dict[str, Any]] = []
         total_tokens = 0
         total_cost = 0.0
-        for r in results:
+        for i, r in enumerate(raw_results):
+            if isinstance(r, BaseException):
+                c = companies[i]
+                company_name = c.get("name", "unknown") if isinstance(c, dict) else "unknown"
+                all_errors.append(
+                    {
+                        "agent": "jobs_scraper",
+                        "message": f"Scrape failed for {company_name}: {r}",
+                        "step": "scrape_company",
+                    }
+                )
+                continue
             all_raw_jobs.extend(r.raw_jobs)
             all_errors.extend(r.errors)
             total_tokens += r.tokens_used

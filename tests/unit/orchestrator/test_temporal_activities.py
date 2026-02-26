@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import json
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 from job_hunter_agents.orchestrator.temporal_payloads import (
+    ScrapeCompanyInput,
     StepInput,
 )
 
@@ -215,3 +217,74 @@ async def test_notify_activity_calls_agent() -> None:
 
         result = await notify_activity(payload)
         assert result.tokens_used == 100
+
+
+@pytest.mark.asyncio
+async def test_scrape_company_activity() -> None:
+    """scrape_company_activity runs JobsScraperAgent for a single company."""
+    from tests.mocks.mock_factories import make_company, make_run_config
+
+    company = make_company()
+    config = make_run_config()
+    company_data = json.loads(company.model_dump_json())
+    config_data = json.loads(config.model_dump_json())
+    payload = ScrapeCompanyInput(company_data=company_data, config_data=config_data)
+
+    class _MockScraperAgent:
+        def __init__(self, settings: object) -> None:
+            pass
+
+        async def run(self, state: object) -> object:
+            from tests.mocks.mock_factories import make_raw_job
+
+            raw = make_raw_job(company_id=state.companies[0].id)  # type: ignore[attr-defined]
+            state.raw_jobs = [raw]  # type: ignore[attr-defined]
+            return state
+
+    with (
+        patch(
+            "job_hunter_agents.orchestrator.temporal_activities._get_settings",
+            return_value=MagicMock(),
+        ),
+        patch(
+            "job_hunter_agents.agents.jobs_scraper.JobsScraperAgent",
+            _MockScraperAgent,
+        ),
+    ):
+        from job_hunter_agents.orchestrator.temporal_activities import (
+            scrape_company_activity,
+        )
+
+        result = await scrape_company_activity(payload)
+
+    assert len(result.raw_jobs) == 1
+    assert "company_id" in result.raw_jobs[0]
+    assert result.errors == []
+
+
+@pytest.mark.asyncio
+async def test_settings_override_used_when_set() -> None:
+    """_get_settings returns the override when set."""
+    from job_hunter_agents.orchestrator.temporal_activities import (
+        _get_settings,
+        set_settings_override,
+    )
+
+    mock = MagicMock()
+    mock.custom_field = "test"
+
+    set_settings_override(mock)
+    try:
+        result = _get_settings()
+        assert result is mock
+    finally:
+        set_settings_override(None)
+
+    # After clearing, it should try to create Settings from env
+    with patch(
+        "job_hunter_core.config.settings.Settings",
+        return_value=MagicMock(),
+    ) as mock_settings_cls:
+        result = _get_settings()
+        assert result is not mock
+        mock_settings_cls.assert_called_once()

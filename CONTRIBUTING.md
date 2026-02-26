@@ -60,7 +60,7 @@ For changes touching the pipeline, agents, or infrastructure, also run integrati
 make test-int   # starts Docker infra + runs integration tests
 ```
 
-- Coverage must remain at or above 80%.
+- Coverage must remain at or above 90%.
 - All existing tests must still pass.
 - New code must include tests.
 
@@ -79,6 +79,25 @@ The project supports `--dry-run` which mocks all external services (LLM, search,
 - CLI: `job-hunter run resume.pdf --prefs "..." --dry-run`
 
 Fake implementations live in `tests/mocks/` (named classes, not anonymous MagicMocks).
+
+### Temporal Orchestration
+
+The project supports two orchestration modes:
+
+1. **Sequential pipeline** (default) — simple async pipeline with JSON checkpoints
+2. **Temporal** — durable workflow execution via `--temporal` CLI flag
+
+To develop with Temporal locally:
+
+```bash
+make dev-temporal    # start Postgres + Redis + Temporal
+# Run with Temporal orchestration:
+uv run job-hunter run resume.pdf --prefs "..." --temporal
+# Or with embedded worker (single process, no separate worker needed):
+JH_TEMPORAL_EMBEDDED_WORKER=true uv run job-hunter run resume.pdf --prefs "..." --temporal --dry-run
+```
+
+When adding or modifying agents, ensure the Temporal activity wrapper in `orchestrator/temporal_activities.py` and the agent map in `orchestrator/temporal_registry.py` are updated.
 
 ### Tracing with Jaeger
 

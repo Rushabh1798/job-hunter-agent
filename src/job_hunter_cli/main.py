@@ -38,6 +38,10 @@ def run(
     resume_from: str | None = typer.Option(
         None, "--resume-from", help="Resume from checkpoint run_id"
     ),
+    adaptive: bool = typer.Option(
+        True, "--adaptive/--no-adaptive", help="Use adaptive pipeline with discovery loop"
+    ),
+    min_jobs: int | None = typer.Option(None, "--min-jobs", help="Minimum recommended jobs target"),
     temporal: bool = typer.Option(
         False, "--temporal", help="Use Temporal orchestrator (requires Temporal server)"
     ),
@@ -84,6 +88,9 @@ def run(
     if trace:
         settings.otel_exporter = "otlp"
 
+    if min_jobs is not None:
+        settings.min_recommended_jobs = min_jobs
+
     configure_logging(settings)
     configure_tracing(settings)
 
@@ -100,7 +107,7 @@ def run(
         patch_stack = activate_dry_run_patches()
 
     try:
-        result = asyncio.run(_run_pipeline(settings, config))
+        result = asyncio.run(_run_pipeline(settings, config, adaptive=adaptive))
     except Exception as exc:
         # Surface Temporal connection failures with a clear message
         from job_hunter_core.exceptions import TemporalConnectionError
@@ -165,7 +172,12 @@ def version() -> None:
     console.print("job-hunter-agent v0.1.0")
 
 
-async def _run_pipeline(settings: Settings, config: RunConfig) -> RunResult:
+async def _run_pipeline(
+    settings: Settings,
+    config: RunConfig,
+    *,
+    adaptive: bool = True,
+) -> RunResult:
     """Select and run the appropriate orchestrator."""
     if settings.orchestrator == "temporal":
         from job_hunter_agents.orchestrator.temporal_orchestrator import TemporalOrchestrator
@@ -173,8 +185,12 @@ async def _run_pipeline(settings: Settings, config: RunConfig) -> RunResult:
         orchestrator = TemporalOrchestrator(settings)
         return await orchestrator.run(config)
 
-    pipeline = Pipeline(settings)
-    return await pipeline.run(config)
+    if adaptive:
+        from job_hunter_agents.orchestrator.adaptive_pipeline import AdaptivePipeline
+
+        return await AdaptivePipeline(settings).run(config)
+
+    return await Pipeline(settings).run(config)
 
 
 if __name__ == "__main__":

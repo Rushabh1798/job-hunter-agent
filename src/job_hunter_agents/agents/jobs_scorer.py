@@ -108,7 +108,7 @@ class JobsScorerAgent(BaseAgent):
         assert profile is not None
         assert prefs is not None
 
-        jobs_block = self._format_jobs_block(jobs)
+        jobs_block = self._format_jobs_block(jobs, state=state)
         currency = prefs.currency or "USD"
         symbol = _currency_symbol(currency)
         salary_range = "Not specified"
@@ -164,8 +164,18 @@ class JobsScorerAgent(BaseAgent):
 
         return scored_jobs
 
-    def _format_jobs_block(self, jobs: list[NormalizedJob]) -> str:
+    def _format_jobs_block(
+        self,
+        jobs: list[NormalizedJob],
+        state: PipelineState | None = None,
+    ) -> str:
         """Format jobs for the scoring prompt."""
+        # Build company_id -> tier lookup
+        tier_map: dict[str, str] = {}
+        if state:
+            for company in state.companies:
+                tier_map[str(company.id)] = company.tier.value
+
         blocks: list[str] = []
         for i, job in enumerate(jobs):
             salary = "Not specified"
@@ -174,12 +184,16 @@ class JobsScorerAgent(BaseAgent):
                 cur = job.currency or "USD"
                 salary = f"{sym}{job.salary_min:,}-{sym}{job.salary_max:,} {cur}"
 
+            tier = tier_map.get(str(job.company_id), "unknown")
+
             blocks.append(
                 f'<job index="{i}">\n'
                 f"Company: {job.company_name}\n"
+                f"Company Tier: {tier}\n"
                 f"Title: {job.title}\n"
                 f"Location: {job.location or 'Not specified'}\n"
                 f"Remote: {job.remote_type}\n"
+                f"Posted Date: {job.posted_date or 'Unknown'}\n"
                 f"Salary: {salary}\n"
                 f"Required Skills: {', '.join(job.required_skills) or 'Not specified'}\n"
                 f"Preferred Skills: {', '.join(job.preferred_skills) or 'None'}\n"

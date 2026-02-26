@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import date
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
 from uuid import uuid4
@@ -15,6 +16,7 @@ from job_hunter_agents.agents.jobs_scorer import (
     _currency_symbol,
 )
 from job_hunter_core.models.candidate import CandidateProfile, SearchPreferences, Skill
+from job_hunter_core.models.company import ATSType, CareerPage, Company, CompanyTier
 from job_hunter_core.models.job import NormalizedJob
 from job_hunter_core.models.run import RunConfig
 from job_hunter_core.state import PipelineState
@@ -176,6 +178,48 @@ class TestJobsScorerAgent:
         assert "Test Role" in block
         assert "TestCo" in block
         assert 'index="0"' in block
+        assert "Posted Date:" in block
+        assert "Company Tier:" in block
+
+    def test_format_jobs_block_with_posted_date(self) -> None:
+        """Jobs block includes posted_date when set."""
+        settings = make_settings()
+        agent = JobsScorerAgent(settings)
+        job = _make_normalized_job("Dev")
+        job.posted_date = date(2025, 7, 1)
+        block = agent._format_jobs_block([job])
+
+        assert "Posted Date: 2025-07-01" in block
+
+    def test_format_jobs_block_with_company_tier(self) -> None:
+        """Jobs block includes company tier from state lookup."""
+        settings = make_settings()
+        agent = JobsScorerAgent(settings)
+        company_id = uuid4()
+        job = NormalizedJob(
+            raw_job_id=uuid4(),
+            company_id=company_id,
+            company_name="BigTech",
+            title="SWE",
+            jd_text="Build stuff",
+            apply_url="https://bigtech.com/apply",
+            content_hash="h1",
+        )
+        state = PipelineState(
+            config=RunConfig(resume_path=Path("/tmp/t.pdf"), preferences_text="t"),
+        )
+        state.companies = [
+            Company(
+                id=company_id,
+                name="BigTech",
+                domain="bigtech.com",
+                career_page=CareerPage(url="https://bigtech.com/careers", ats_type=ATSType.UNKNOWN),
+                tier=CompanyTier.TIER_1,
+            )
+        ]
+        block = agent._format_jobs_block([job], state=state)
+
+        assert "Company Tier: tier_1" in block
 
     def test_format_jobs_block_with_inr_salary(self) -> None:
         """Jobs block formats INR salary with rupee symbol."""

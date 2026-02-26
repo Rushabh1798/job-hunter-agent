@@ -49,6 +49,8 @@ dependencies = [
     "opentelemetry-api>=1.20",
     "opentelemetry-sdk>=1.20",
     "opentelemetry-exporter-otlp>=1.20",
+    # Workflow orchestration
+    "temporalio>=1.7,<2.0",
     # Scheduling
     "apscheduler>=3.10",
     # HTTP client
@@ -67,6 +69,7 @@ dev = [
     "pytest-mock>=3.14",
     "ruff>=0.8",
     "mypy>=1.13",
+    "ddgs>=7.0",
 ]
 
 [tool.ruff]
@@ -75,7 +78,7 @@ target-version = "py312"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "N", "UP", "ANN", "ASYNC", "B", "C4", "DTZ", "PT", "RUF"]
-ignore = ["ANN101", "ANN102"]
+ignore = []
 
 [tool.ruff.lint.per-file-ignores]
 "src/job_hunter_cli/main.py" = ["B008"]  # typer requires function calls in defaults
@@ -119,6 +122,10 @@ module = [
     "instructor.*",
     "opentelemetry",
     "opentelemetry.*",
+    "temporalio",
+    "temporalio.*",
+    "ddgs",
+    "ddgs.*",
 ]
 ignore_missing_imports = true
 follow_imports = "skip"
@@ -134,9 +141,11 @@ markers = [
     "live: requires real network access",
     "e2e: full end-to-end pipeline test",
     "slow: takes > 5 seconds",
+    "network: requires real network access to public APIs",
 ]
 
 [tool.coverage.report]
+fail_under = 90
 exclude_lines = ["pragma: no cover", "if TYPE_CHECKING:"]
 
 [build-system]

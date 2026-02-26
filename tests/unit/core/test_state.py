@@ -131,6 +131,35 @@ class TestPipelineStateCheckpoint:
         assert restored.total_tokens == 5000
         assert restored.total_cost_usd == pytest.approx(1.23)
 
+    def test_run_result_roundtrips_through_checkpoint(self) -> None:
+        """run_result with output_files survives checkpoint serialization."""
+        state = make_pipeline_state(
+            scored_jobs=[make_scored_job()],
+            total_tokens=500,
+            total_cost_usd=0.25,
+        )
+        state.run_result = state.build_result(
+            status="success",
+            duration_seconds=5.0,
+            output_files=["/tmp/results.csv", "/tmp/results.xlsx"],
+        )
+        cp = state.to_checkpoint("aggregate")
+        restored = PipelineState.from_checkpoint(cp)
+
+        assert restored.run_result is not None
+        assert restored.run_result.status == "success"
+        assert len(restored.run_result.output_files) == 2
+        assert restored.run_result.output_files[0] == Path("/tmp/results.csv")
+
+    def test_run_result_none_roundtrips(self) -> None:
+        """State without run_result still roundtrips cleanly."""
+        state = make_pipeline_state()
+        assert state.run_result is None
+
+        cp = state.to_checkpoint("parse_resume")
+        restored = PipelineState.from_checkpoint(cp)
+        assert restored.run_result is None
+
     def test_from_checkpoint_invalid_config(self) -> None:
         """Missing config in snapshot raises ValueError."""
         cp = PipelineCheckpoint(

@@ -46,6 +46,41 @@ services:
     profiles:
       - full
 
+  temporal:
+    image: temporalio/auto-setup:latest
+    environment:
+      - DB=postgres12_pgx
+      - POSTGRES_SEEDS=postgres
+      - POSTGRES_USER=postgres
+      - POSTGRES_PWD=dev
+      - DB_PORT=5432
+    ports:
+      - "7233:7233"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "temporal operator cluster health --address $(hostname -i):7233 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    profiles:
+      - temporal
+      - full
+
+  temporal-ui:
+    image: temporalio/ui:latest
+    environment:
+      - TEMPORAL_ADDRESS=temporal:7233
+    ports:
+      - "8233:8080"
+    depends_on:
+      temporal:
+        condition: service_healthy
+    profiles:
+      - temporal
+
   jaeger:
     image: jaegertracing/all-in-one:latest
     environment:

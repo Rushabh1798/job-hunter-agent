@@ -12,7 +12,7 @@ from rich.console import Console
 from job_hunter_agents.observability import configure_logging, configure_tracing
 from job_hunter_agents.orchestrator.pipeline import Pipeline
 from job_hunter_core.config.settings import Settings
-from job_hunter_core.models.run import RunConfig
+from job_hunter_core.models.run import RunConfig, RunResult
 
 app = typer.Typer(
     name="job-hunter",
@@ -37,6 +37,9 @@ def run(
     lite: bool = typer.Option(False, "--lite", help="SQLite + local embeddings, no Docker"),
     resume_from: str | None = typer.Option(
         None, "--resume-from", help="Resume from checkpoint run_id"
+    ),
+    temporal: bool = typer.Option(
+        False, "--temporal", help="Use Temporal orchestrator (requires Temporal server)"
     ),
     trace: bool = typer.Option(False, "--trace", help="Enable OTLP tracing (requires Jaeger)"),
     verbose: bool = typer.Option(False, "-v", "--verbose", help="Enable debug logging"),
@@ -75,6 +78,9 @@ def run(
     if verbose:
         settings.log_level = "DEBUG"
 
+    if temporal:
+        settings.orchestrator = "temporal"
+
     if trace:
         settings.otel_exporter = "otlp"
 
@@ -82,6 +88,10 @@ def run(
     configure_tracing(settings)
 
     console.print(f"[bold green]Starting run:[/bold green] {config.run_id}")
+    if settings.orchestrator == "temporal":
+        console.print("[dim]Orchestrator: Temporal[/dim]")
+    else:
+        console.print("[dim]Orchestrator: checkpoint[/dim]")
 
     patch_stack = None
     if dry_run:
@@ -90,8 +100,19 @@ def run(
         patch_stack = activate_dry_run_patches()
 
     try:
-        pipeline = Pipeline(settings)
-        result = asyncio.run(pipeline.run(config))
+        result = asyncio.run(_run_pipeline(settings, config))
+    except Exception as exc:
+        # Surface Temporal connection failures with a clear message
+        from job_hunter_core.exceptions import TemporalConnectionError
+
+        if isinstance(exc, TemporalConnectionError):
+            console.print(
+                f"[red]Error:[/red] Temporal server unreachable at "
+                f"{settings.temporal_address}. Start it with `make dev-temporal` "
+                f"or omit --temporal to use checkpoint mode.",
+            )
+            raise typer.Exit(code=1) from exc
+        raise
     finally:
         if patch_stack is not None:
             patch_stack.close()
@@ -121,9 +142,39 @@ def run(
 
 
 @app.command()
+def worker(
+    queue: str = typer.Option("default", "--queue", help="Task queue: default, llm, or scraping"),
+    verbose: bool = typer.Option(False, "-v", "--verbose", help="Enable debug logging"),
+) -> None:
+    """Start a Temporal worker for the specified task queue."""
+    settings = Settings()  # type: ignore[call-arg]
+    if verbose:
+        settings.log_level = "DEBUG"
+
+    configure_logging(settings)
+    console.print(f"[bold green]Starting Temporal worker:[/bold green] queue={queue}")
+
+    from job_hunter_agents.orchestrator.temporal_worker import run_worker
+
+    asyncio.run(run_worker(settings, queue))
+
+
+@app.command()
 def version() -> None:
     """Show version."""
     console.print("job-hunter-agent v0.1.0")
+
+
+async def _run_pipeline(settings: Settings, config: RunConfig) -> RunResult:
+    """Select and run the appropriate orchestrator."""
+    if settings.orchestrator == "temporal":
+        from job_hunter_agents.orchestrator.temporal_orchestrator import TemporalOrchestrator
+
+        orchestrator = TemporalOrchestrator(settings)
+        return await orchestrator.run(config)
+
+    pipeline = Pipeline(settings)
+    return await pipeline.run(config)
 
 
 if __name__ == "__main__":

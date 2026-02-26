@@ -16,7 +16,7 @@ from job_hunter_agents.tools.ats_clients.ashby import AshbyClient
 from job_hunter_agents.tools.ats_clients.greenhouse import GreenhouseClient
 from job_hunter_agents.tools.ats_clients.lever import LeverClient
 from job_hunter_agents.tools.ats_clients.workday import WorkdayClient
-from job_hunter_agents.tools.web_search import WebSearchTool
+from job_hunter_agents.tools.factories import create_search_provider
 from job_hunter_core.exceptions import FatalAgentError
 from job_hunter_core.models.company import ATSType, CareerPage, Company
 from job_hunter_core.state import PipelineState
@@ -151,7 +151,7 @@ class CompanyFinderAgent(BaseAgent):
 
     async def _find_career_url(self, candidate: CompanyCandidate) -> str | None:
         """Find the career page URL for a company."""
-        search_tool = WebSearchTool(api_key=self.settings.tavily_api_key.get_secret_value())
+        search_tool = create_search_provider(self.settings)
         return await search_tool.find_career_page(candidate.name)
 
     async def _detect_ats(self, career_url: str) -> tuple[ATSType, str]:

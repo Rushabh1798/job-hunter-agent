@@ -7,9 +7,11 @@ import socket
 import time
 from collections.abc import AsyncGenerator, Generator
 from contextlib import ExitStack
+from pathlib import Path
 
 import pytest
 import pytest_asyncio
+from _pytest.fixtures import FixtureRequest
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     AsyncSession,
@@ -17,6 +19,7 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 
+from job_hunter_core.config.settings import Settings
 from job_hunter_infra.db.models import Base
 
 # ---------------------------------------------------------------------------
@@ -24,7 +27,13 @@ from job_hunter_infra.db.models import Base
 # ---------------------------------------------------------------------------
 
 
-def _tcp_reachable(host: str, port: int, timeout: float = 1.0, retries: int = 5) -> bool:
+def _tcp_reachable(
+    host: str,
+    port: int,
+    timeout: float = 1.0,
+    retries: int = 15,
+    delay: float = 2.0,
+) -> bool:
     """Check if a TCP service is reachable, retrying on failure."""
     for attempt in range(retries):
         try:
@@ -32,21 +41,33 @@ def _tcp_reachable(host: str, port: int, timeout: float = 1.0, retries: int = 5)
                 return True
         except OSError:
             if attempt < retries - 1:
-                time.sleep(0.5)
+                time.sleep(delay)
     return False
 
 
-_pg_up = _tcp_reachable("localhost", 5432)
-_redis_up = _tcp_reachable("localhost", 6379)
+_pg_up = _tcp_reachable("localhost", 5432, retries=15)
+_redis_up = _tcp_reachable("localhost", 6379, retries=10)
+_temporal_up = _tcp_reachable("localhost", 7233, retries=15, delay=2.0)
 
-skip_no_postgres = pytest.mark.skipif(
+
+# Hard-fail markers — integration tests MUST have containers running
+require_postgres = pytest.mark.skipif(
     not _pg_up,
-    reason="PostgreSQL not reachable on localhost:5432 — run `make dev` first",
+    reason="PostgreSQL not reachable on localhost:5432 — run `make dev-temporal` first",
 )
-skip_no_redis = pytest.mark.skipif(
+require_redis = pytest.mark.skipif(
     not _redis_up,
-    reason="Redis not reachable on localhost:6379 — run `make dev` first",
+    reason="Redis not reachable on localhost:6379 — run `make dev-temporal` first",
 )
+require_temporal = pytest.mark.skipif(
+    not _temporal_up,
+    reason="Temporal not reachable on localhost:7233 — run `make dev-temporal` first",
+)
+
+# Keep old names for backwards compat with existing test files
+skip_no_postgres = require_postgres
+skip_no_redis = require_redis
+skip_no_temporal = require_temporal
 
 
 # ---------------------------------------------------------------------------
@@ -155,7 +176,7 @@ def _reset_logging() -> Generator[None, None, None]:
 
 
 # ---------------------------------------------------------------------------
-# Dry-run patches fixture
+# Dry-run patches fixture (full mocking for pipeline logic tests)
 # ---------------------------------------------------------------------------
 
 
@@ -167,3 +188,88 @@ def dry_run_patches() -> Generator[ExitStack, None, None]:
     stack = activate_dry_run_patches()
     yield stack
     stack.close()
+
+
+# ---------------------------------------------------------------------------
+# Integration patches fixture (LLM + email + PDF only)
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def integration_patches() -> Generator[ExitStack, None, None]:
+    """Activate integration patches — only LLM, email, and PDF are mocked.
+
+    Search (DuckDuckGo), scraping (crawl4ai), and ATS clients (public APIs)
+    are left real.
+    """
+    from job_hunter_agents.dryrun import activate_integration_patches
+
+    stack = activate_integration_patches()
+    yield stack
+    stack.close()
+
+
+# ---------------------------------------------------------------------------
+# Real settings fixture for integration tests
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def real_settings(tmp_path: Path) -> Settings:
+    """Real Settings pointing at test Postgres + Redis containers."""
+    from tests.mocks.mock_settings import make_real_settings
+
+    return make_real_settings(tmp_path)
+
+
+# ---------------------------------------------------------------------------
+# Pipeline tracing fixture — enables OTEL + prints run report
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def pipeline_tracing(request: FixtureRequest) -> Generator[object, None, None]:
+    """Enable OTEL tracing with InMemorySpanExporter and print run report.
+
+    Automatically detects mock mode from co-active patch fixtures:
+    - integration_patches -> 'integration'
+    - dry_run_patches -> 'dry_run'
+    - neither -> 'live'
+
+    After the test, collects all spans and prints a formatted run report
+    to stdout (visible with ``pytest -s``).
+    """
+    otel = pytest.importorskip("opentelemetry")  # noqa: F841
+    from opentelemetry.sdk.trace.export.in_memory_span_exporter import (
+        InMemorySpanExporter,
+    )
+
+    from job_hunter_agents.observability.run_report import (
+        format_run_report,
+        generate_run_report,
+    )
+    from job_hunter_agents.observability.tracing import (
+        configure_tracing_with_exporter,
+        disable_tracing,
+    )
+
+    exporter = InMemorySpanExporter()
+    configure_tracing_with_exporter("job-hunter-test", exporter)
+
+    yield exporter
+
+    # Determine mock mode from active fixtures
+    active_fixtures = request.fixturenames
+    if "integration_patches" in active_fixtures:
+        mock_mode = "integration"
+    elif "dry_run_patches" in active_fixtures:
+        mock_mode = "dry_run"
+    else:
+        mock_mode = "live"
+
+    # Generate and print run report
+    spans = exporter.get_finished_spans()
+    report = generate_run_report(spans, mock_mode=mock_mode)
+    print(format_run_report(report))
+
+    disable_tracing()

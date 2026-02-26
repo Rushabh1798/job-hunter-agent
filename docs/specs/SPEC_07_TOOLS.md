@@ -11,6 +11,8 @@ External I/O boundary -- thin async wrappers around third-party libraries. Tools
 | `src/job_hunter_agents/tools/pdf_parser.py` | `PDFParser` | 107 |
 | `src/job_hunter_agents/tools/browser.py` | `WebScraper` | 61 |
 | `src/job_hunter_agents/tools/web_search.py` | `SearchResult`, `WebSearchTool` | 73 |
+| `src/job_hunter_agents/tools/duckduckgo_search.py` | `DuckDuckGoSearchTool` | 82 |
+| `src/job_hunter_agents/tools/factories.py` | `create_search_provider()`, `create_page_scraper()` | 44 |
 | `src/job_hunter_agents/tools/embedder.py` | `LocalEmbedder`, `VoyageEmbedder`, `CachedEmbedder` | 113 |
 | `src/job_hunter_agents/tools/email_sender.py` | `EmailSender` | 178 |
 | `src/job_hunter_agents/tools/ats_clients/` | ATS client implementations (see SPEC_08) | -- |
@@ -109,6 +111,48 @@ class WebSearchTool:
 ```
 
 **Constructor:** `api_key: str` -- Tavily API key (from `Settings.tavily_api_key`).
+
+Both `WebSearchTool` and `DuckDuckGoSearchTool` implement the `SearchProvider` Protocol (see SPEC_01 interfaces).
+
+---
+
+### DuckDuckGoSearchTool (`tools/duckduckgo_search.py`)
+
+```python
+class DuckDuckGoSearchTool:
+    """Free web search using DuckDuckGo. No API key required."""
+
+    async def search(self, query: str, max_results: int = 5) -> list[SearchResult]
+        """Web search via duckduckgo_search.DDGS().text() wrapped in asyncio.to_thread().
+        Returns list of SearchResult dataclasses."""
+
+    async def find_career_page(self, company_name: str) -> str | None
+        """Search for career page. Same keyword-matching logic as WebSearchTool.find_career_page()."""
+
+    async def search_jobs_on_site(
+        self, domain: str, role_query: str, max_results: int = 10
+    ) -> list[SearchResult]
+        """Site-scoped search: "site:{domain} {role_query} careers jobs"."""
+```
+
+**Constructor:** No parameters. Stateless. Uses `duckduckgo-search` package (dev dependency only).
+
+**Primary use case:** Integration tests where real search is needed without paying for Tavily API. Selected when `settings.search_provider = "duckduckgo"`.
+
+---
+
+### Tool Factories (`tools/factories.py`)
+
+```python
+def create_search_provider(settings: Settings) -> SearchProvider:
+    """Factory: returns WebSearchTool (tavily) or DuckDuckGoSearchTool (duckduckgo)
+    based on settings.search_provider."""
+
+def create_page_scraper() -> PageScraper:
+    """Factory: returns WebScraper instance."""
+```
+
+Agents (`CompanyFinderAgent`, `JobsScraperAgent`) use these factories instead of importing concrete tool classes directly. This enables patching at the factory level in `dryrun.py` and allows swapping implementations via settings.
 
 ---
 
@@ -246,6 +290,7 @@ Tools do NOT import from `job_hunter_agents`, `job_hunter_infra`, or `job_hunter
 | WebScraper | playwright | `playwright.async_api.async_playwright` | Fallback browser-based fetching |
 | WebScraper | httpx | `httpx.AsyncClient` | Direct HTTP for JSON API calls |
 | WebSearchTool | tavily-python | `tavily.TavilyClient` | Web search API |
+| DuckDuckGoSearchTool | duckduckgo-search (dev) | `duckduckgo_search.DDGS` | Free web search for integration tests |
 | LocalEmbedder | sentence-transformers | `sentence_transformers.SentenceTransformer` | Local embedding model |
 | VoyageEmbedder | httpx | `httpx.AsyncClient` | Voyage API HTTP calls |
 | EmailSender | aiosmtplib | `aiosmtplib` | Async SMTP delivery |
@@ -321,7 +366,8 @@ to_email + subject + html_body + text_body + optional attachment_path
 |------|----------------|
 | PDFParser | None (stateless, no config) |
 | WebScraper | `scrape_timeout_seconds` (used by calling agents, not internally -- internal timeout hardcoded at 30s) |
-| WebSearchTool | `tavily_api_key` (passed to constructor) |
+| WebSearchTool | `tavily_api_key` (passed to constructor), `search_provider` (selects implementation via factory) |
+| DuckDuckGoSearchTool | None (stateless, no config) |
 | LocalEmbedder | `embedding_model` (passed to constructor as `model_name`) |
 | VoyageEmbedder | `voyage_api_key` (passed to constructor), `embedding_model` not used (defaults to `"voyage-2"`) |
 | CachedEmbedder | `cache_backend` / `redis_url` (indirectly, via the CacheClient instance passed in) |

@@ -10,6 +10,11 @@ from job_hunter_agents.observability.logging import (
     clear_run_context,
     configure_logging,
 )
+from job_hunter_agents.observability.run_report import (
+    RunReport,
+    format_run_report,
+    generate_run_report,
+)
 from job_hunter_agents.observability.tracing import (
     configure_tracing,
     configure_tracing_with_exporter,
@@ -22,6 +27,7 @@ from job_hunter_agents.observability.tracing import (
 __all__ = [
     "CostTracker",
     "LLMCallMetrics",
+    "RunReport",
     "bind_run_context",
     "clear_run_context",
     "configure_logging",
@@ -29,6 +35,8 @@ __all__ = [
     "configure_tracing_with_exporter",
     "disable_tracing",
     "extract_token_usage",
+    "format_run_report",
+    "generate_run_report",
     "get_tracer",
     "trace_pipeline_run",
     "traced_agent",

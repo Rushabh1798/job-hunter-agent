@@ -1,11 +1,15 @@
-"""Tests for database repositories using SQLite."""
+"""Tests for profile and company repositories using SQLite."""
 
 from __future__ import annotations
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 
-from job_hunter_infra.db.models import Base, CompanyModel, ProfileModel
+from job_hunter_infra.db.models import (
+    Base,
+    CompanyModel,
+    ProfileModel,
+)
 from job_hunter_infra.db.repositories.company_repo import CompanyRepository
 from job_hunter_infra.db.repositories.profile_repo import ProfileRepository
 from job_hunter_infra.db.session import create_session_factory
@@ -123,3 +127,10 @@ class TestCompanyRepository:
             )
         results = await repo.list_all(limit=2)
         assert len(results) == 2
+
+    @pytest.mark.asyncio
+    async def test_get_by_domain_not_found(self, session: AsyncSession) -> None:
+        """Returns None for non-existent domain."""
+        repo = CompanyRepository(session)
+        found = await repo.get_by_domain("nonexistent.com")
+        assert found is None

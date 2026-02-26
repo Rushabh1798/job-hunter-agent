@@ -25,6 +25,11 @@ Load only the spec files you need for the current task. Most tasks require 1-2 s
 | Build a new agent from scratch | SPEC_04, SPEC_05 (for pattern) |
 | Modify the pipeline step order | SPEC_04 |
 | Fix checkpoint/crash recovery | SPEC_04 |
+| Configure Temporal orchestration | SPEC_04, SPEC_11 |
+| Add agent to Temporal workflow | SPEC_04 |
+| Fix Temporal connection/auth | SPEC_04, SPEC_01 |
+| Modify Temporal retry/timeout | SPEC_04 |
+| Add Temporal worker queue type | SPEC_04, SPEC_11 |
 | Modify resume/prefs parsing | SPEC_05, SPEC_01 |
 | Modify company discovery | SPEC_06, SPEC_08 |
 | Modify job scraping | SPEC_06, SPEC_08, SPEC_07 |
@@ -58,6 +63,8 @@ Load only the spec files you need for the current task. Most tasks require 1-2 s
 | Add a new test mock | SPEC_11, (relevant spec) |
 | Add a test fixture | SPEC_11 |
 | Add dry-run support for new tool | SPEC_04, SPEC_11 |
+| Set up Temporal dev server | SPEC_11 |
+| Debug Temporal worker issues | SPEC_04, SPEC_11 |
 
 ---
 
@@ -68,7 +75,7 @@ Load only the spec files you need for the current task. Most tasks require 1-2 s
 | 01 | [SPEC_01_CORE_MODELS.md](specs/SPEC_01_CORE_MODELS.md) | `job_hunter_core` | Domain models, config, interfaces, state, constants, exceptions |
 | 02 | [SPEC_02_DATABASE.md](specs/SPEC_02_DATABASE.md) | `job_hunter_infra/db` | ORM models, engine/session, 5 repositories |
 | 03 | [SPEC_03_CACHE_AND_VECTOR.md](specs/SPEC_03_CACHE_AND_VECTOR.md) | `job_hunter_infra/cache+vector` | Redis + DB cache, company/page caches, vector similarity |
-| 04 | [SPEC_04_AGENT_FRAMEWORK.md](specs/SPEC_04_AGENT_FRAMEWORK.md) | `job_hunter_agents` | BaseAgent, Pipeline, checkpoint, dryrun |
+| 04 | [SPEC_04_AGENT_FRAMEWORK.md](specs/SPEC_04_AGENT_FRAMEWORK.md) | `job_hunter_agents` | BaseAgent, Pipeline, checkpoint, dryrun, Temporal orchestration |
 | 05 | [SPEC_05_PARSING_AGENTS.md](specs/SPEC_05_PARSING_AGENTS.md) | `job_hunter_agents` | ResumeParser + PrefsParser agents + prompts |
 | 06 | [SPEC_06_DISCOVERY_AND_SCRAPING.md](specs/SPEC_06_DISCOVERY_AND_SCRAPING.md) | `job_hunter_agents` | CompanyFinder + JobsScraper agents + prompts |
 | 07 | [SPEC_07_TOOLS.md](specs/SPEC_07_TOOLS.md) | `job_hunter_agents/tools` | PDF parser, web scraper, web search, embedder, email sender |

@@ -8,15 +8,15 @@ Composition root and development infrastructure: CLI entrypoint that wires setti
 
 | File | Primary Exports | Lines |
 |------|----------------|-------|
-| `src/job_hunter_cli/main.py` | `app` (typer), `run()`, `version()` | 131 |
-| `Makefile` | 18 targets | 88 |
+| `src/job_hunter_cli/main.py` | `app` (typer), `run()`, `worker()`, `version()` | 170 |
+| `Makefile` | 22 targets | 104 |
 | `Dockerfile` | Multi-stage build (builder + runtime) | 85 |
-| `docker-compose.yml` | postgres, redis, app, jaeger services | ~55 |
+| `docker-compose.yml` | postgres, redis, app, jaeger, temporal, temporal-ui services | ~91 |
 | `.github/workflows/ci.yml` | lint, test, docker jobs | 62 |
 | `.pre-commit-config.yaml` | pre-commit-hooks, ruff | 17 |
 | `pyproject.toml` | Dependencies, tool config | ~200 |
-| `.env.example` | 25+ env vars documented | 48 |
-| `tests/mocks/mock_settings.py` | `make_settings()` | 36 |
+| `.env.example` | 35+ env vars documented | 60 |
+| `tests/mocks/mock_settings.py` | `make_settings()`, `make_real_settings()` | 68 |
 | `tests/mocks/mock_factories.py` | 11 factory functions | 155 |
 | `tests/mocks/mock_llm.py` | `FakeInstructorClient`, `build_fake_response()` | 95 |
 | `tests/mocks/mock_tools.py` | 9 fake tool classes | 208 |
@@ -38,24 +38,39 @@ def run(
     company_limit: int | None = None,      # --company-limit
     lite: bool = False,                    # --lite
     resume_from: str | None = None,        # --resume-from
+    temporal: bool = False,                # --temporal
     trace: bool = False,                   # --trace
     verbose: bool = False,                 # -v/--verbose
 ) -> None
 
 @app.command()
+def worker(
+    queue: str = "default",                # --queue (default|llm|scraping)
+    verbose: bool = False,                 # -v/--verbose
+) -> None
+
+@app.command()
 def version() -> None
+
+async def _run_pipeline(settings: Settings, config: RunConfig) -> RunResult
 ```
 
-**CLI Flow:**
+**CLI `run` Flow:**
 1. Resolve preferences (--prefs text or --prefs-file content)
 2. Build `RunConfig` from all flags
 3. Create `Settings()` from environment
-4. Apply overrides: `--lite` sets sqlite/local/db; `--verbose` sets DEBUG; `--trace` sets otlp
+4. Apply overrides: `--lite` sets sqlite/local/db; `--verbose` sets DEBUG; `--trace` sets otlp; `--temporal` sets `orchestrator="temporal"`
 5. `configure_logging(settings)`, `configure_tracing(settings)`
 6. If `--dry-run`: import and activate dry-run patches (lazy import)
-7. `Pipeline(settings).run(config)` via `asyncio.run()`
+7. `_run_pipeline(settings, config)` via `asyncio.run()` — selects `TemporalOrchestrator` or `Pipeline` based on `settings.orchestrator`
 8. Print result summary (companies, jobs, cost, duration, output files)
 9. Exit code 1 if `result.status != "success"`
+
+**CLI `worker` Flow:**
+1. Create `Settings()` from environment
+2. Apply overrides: `--verbose` sets DEBUG
+3. `configure_logging(settings)`
+4. `run_worker(settings, queue)` via `asyncio.run()` — starts Temporal worker polling the specified task queue
 
 ### Makefile Targets
 
@@ -65,7 +80,8 @@ def version() -> None
 | `install` | `uv sync && playwright install chromium` | Install deps + browser |
 | `dev` | `docker compose up -d` + health checks | Start postgres + redis |
 | `dev-trace` | `docker compose --profile trace up -d` + health checks | Start postgres + redis + Jaeger |
-| `dev-down` | `docker compose down` | Stop all services |
+| `dev-temporal` | `docker compose --profile temporal up -d --wait` + health checks | Start postgres + redis + Temporal + UI |
+| `dev-down` | `docker compose --profile temporal --profile trace --profile full down` | Stop all services (all profiles) |
 | `test` | `pytest -m unit` | Unit tests only |
 | `test-int` | `make dev && pytest -m integration` | Start infra + integration tests |
 | `test-e2e` | `pytest -m "e2e or live" -v` | E2E + live tests |
@@ -75,6 +91,8 @@ def version() -> None
 | `format` | `ruff format . && ruff check --fix .` | Auto-format |
 | `run` | `uv run job-hunter run $(ARGS)` | Run CLI |
 | `run-trace` | `uv run job-hunter run --trace $(ARGS)` | Run CLI with OTLP |
+| `run-temporal` | `uv run job-hunter run --temporal $(ARGS)` | Run CLI with Temporal orchestrator |
+| `worker` | `uv run job-hunter worker --queue $(QUEUE)` | Start Temporal worker (QUEUE=default\|llm\|scraping) |
 | `run-lite` | `JH_DB_BACKEND=sqlite JH_CACHE_BACKEND=db uv run job-hunter run --lite $(ARGS)` | Run lite |
 | `docker-build` | `docker build -t job-hunter-agent:latest .` | Build image |
 | `docker-run` | `docker compose --profile full run --rm app run ...` | Run in Docker |
@@ -107,6 +125,8 @@ def version() -> None
 | postgres | `pgvector/pgvector:pg16` | 5432 | (default) | `pg_isready` |
 | redis | `redis:7-alpine` | 6379 | (default) | `redis-cli ping` |
 | app | Built from `Dockerfile` | — | `full` | — |
+| temporal | `temporalio/auto-setup:latest` | 7233 | `temporal`, `full` | `temporal operator cluster health` |
+| temporal-ui | `temporalio/ui:latest` | 8233→8080 | `temporal` | — |
 | jaeger | `jaegertracing/all-in-one:latest` | 4317, 4318, 16686 | `trace` | — |
 
 ### CI Pipeline (`.github/workflows/ci.yml`)
@@ -116,7 +136,7 @@ def version() -> None
 | Job | Steps | Depends On |
 |-----|-------|-----------|
 | `lint` | checkout, setup-uv, setup-python 3.12, `uv sync`, ruff check, ruff format --check, mypy | — |
-| `test` | checkout, setup-uv, setup-python 3.12, `uv sync`, playwright install, `pytest -m unit --cov --cov-fail-under=80`, upload coverage | — |
+| `test` | checkout, setup-uv, setup-python 3.12, `uv sync`, playwright install, `pytest -m unit --cov --cov-fail-under=90`, upload coverage | — |
 | `docker` | checkout, `docker build` | lint + test |
 
 ### Pre-commit Hooks (`.pre-commit-config.yaml`)
@@ -153,9 +173,24 @@ def make_settings(**overrides: object) -> MagicMock:
     settings.db_backend = "sqlite"
     settings.embedding_provider = "local"
     settings.cache_backend = "db"
+    settings.search_provider = "tavily"
     settings.otel_exporter = "none"
     settings.otel_endpoint = "http://localhost:4317"
     settings.otel_service_name = "job-hunter-test"
+```
+
+#### `make_real_settings()` (`tests/mocks/mock_settings.py`)
+
+Returns a real `Settings` instance pointing at test containers, for integration tests:
+
+```python
+def make_real_settings(tmp_path: Path, **overrides: object) -> Settings:
+    """Real Settings for integration tests — Postgres + Redis + DuckDuckGo."""
+    # search_provider = "duckduckgo" (free, no API key)
+    # db_backend = "postgres" -> localhost:5432
+    # cache_backend = "redis" -> localhost:6379/1
+    # embedding_provider = "local"
+    # anthropic_api_key / tavily_api_key = "fake-key" (LLM is mocked)
 ```
 
 #### Factory Functions (`tests/mocks/mock_factories.py`)
@@ -214,16 +249,19 @@ Each fixture has `{"_meta": {"input_tokens": N, "output_tokens": N}, "data": {..
 
 ## Internal Dependencies
 
-- `job_hunter_core.config.settings.Settings` — created in CLI, passed to Pipeline
+- `job_hunter_core.config.settings.Settings` — created in CLI, passed to Pipeline or TemporalOrchestrator
 - `job_hunter_core.models.run.RunConfig` — built from CLI args
 - `job_hunter_agents.observability.configure_logging`, `configure_tracing` — called at startup
-- `job_hunter_agents.orchestrator.pipeline.Pipeline` — instantiated and run
+- `job_hunter_agents.orchestrator.pipeline.Pipeline` — instantiated and run (checkpoint mode)
+- `job_hunter_agents.orchestrator.temporal_orchestrator.TemporalOrchestrator` — lazy import for --temporal
+- `job_hunter_agents.orchestrator.temporal_worker.run_worker` — lazy import for worker command
 - `job_hunter_agents.dryrun.activate_dry_run_patches` — lazy import for --dry-run
 
 ## External Dependencies
 
 - `typer>=0.9` — CLI framework
 - `rich>=13.0` — Console output formatting
+- `temporalio>=1.7,<2.0` — Temporal SDK (for worker command and --temporal mode)
 - `docker` — Container runtime for dev/CI
 - `uv` — Package manager
 - `ruff>=0.8` — Linting + formatting
@@ -237,9 +275,15 @@ CLI args → RunConfig + Settings
     → configure_logging(settings)
     → configure_tracing(settings)
     → [if dry_run] activate_dry_run_patches()
-    → Pipeline(settings).run(config)
+    → _run_pipeline(settings, config)
+        → [if orchestrator == "temporal"] TemporalOrchestrator(settings).run(config)
+        → [else]                          Pipeline(settings).run(config)
     → RunResult
     → Print summary + exit code
+
+CLI worker → Settings
+    → configure_logging(settings)
+    → run_worker(settings, queue) → polls Temporal server indefinitely
 ```
 
 ## Configuration
@@ -250,6 +294,7 @@ All configuration flows through `Settings` (see SPEC_01). The CLI applies these 
 |------|------------------|
 | `--lite` | `db_backend="sqlite"`, `embedding_provider="local"`, `cache_backend="db"` |
 | `--verbose` | `log_level="DEBUG"` |
+| `--temporal` | `orchestrator="temporal"` |
 | `--trace` | `otel_exporter="otlp"` |
 
 ## Error Handling
@@ -296,6 +341,6 @@ All configuration flows through `Settings` (see SPEC_01). The CLI applies these 
 
 ## Cross-References
 
-- **SPEC_01** — Settings, RunConfig models
-- **SPEC_04** — Pipeline, dryrun module
+- **SPEC_01** — Settings (including Temporal settings), RunConfig models
+- **SPEC_04** — Pipeline, TemporalOrchestrator, Temporal workflow/activities/client/worker, dryrun module
 - **SPEC_10** — configure_logging, configure_tracing called from CLI

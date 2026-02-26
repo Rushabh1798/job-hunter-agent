@@ -2,22 +2,15 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-
 import structlog
 from tavily import TavilyClient
 
+from job_hunter_core.interfaces.search import SearchResult
+
 logger = structlog.get_logger()
 
-
-@dataclass
-class SearchResult:
-    """A single search result."""
-
-    title: str
-    url: str
-    content: str
-    score: float
+# Re-export SearchResult for backwards compatibility
+__all__ = ["SearchResult", "WebSearchTool"]
 
 
 class WebSearchTool:

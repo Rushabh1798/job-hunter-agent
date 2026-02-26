@@ -6,16 +6,21 @@ Monorepo for an autonomous multi-agent job discovery system. Accepts a resume PD
 ## Architecture
 - **Monorepo** with four packages under `src/`: `job_hunter_core`, `job_hunter_agents`, `job_hunter_infra`, `job_hunter_cli`
 - **AD-1**: PostgreSQL + pgvector for relational + vector storage (no standalone vector DB)
-- **AD-2**: Async pipeline with JSON checkpoint files for crash recovery (MVP); Temporal planned for Phase 2
+- **AD-2**: Dual orchestration: checkpoint-based pipeline (default) or Temporal workflows (`--temporal`); no silent fallback — `TemporalConnectionError` raised if Temporal unavailable
 - **AD-3**: Redis for persistent caching (default), DB-backed cache fallback for `--lite` mode. diskcache removed.
 - **AD-4**: Local sentence-transformers embeddings by default; Voyage API optional
 - **AD-5**: `--lite` mode uses SQLite + local embeddings, zero Docker dependencies
 - **AD-6**: instructor library for structured LLM output via Anthropic SDK
 - **AD-7**: crawl4ai for career page scraping (Playwright under the hood)
 - **AD-8**: Docker image ~3-4GB (PyTorch + Chromium); CPU-only torch wheels deferred
+- **AD-9**: Vendor-agnostic tool abstractions — `SearchProvider` and `PageScraper` Protocols with factory functions; agents use factories, not concrete classes
+- **AD-10**: DuckDuckGo search (free, no API key) for integration tests; Tavily for production
+- **AD-11**: Two-tier test mocking — `activate_dry_run_patches()` (full mock) vs `activate_integration_patches()` (LLM + email + PDF only)
+- **AD-12**: Run report generation from OTEL spans — shows component status (MOCK/REAL), agent timing, flow linkage
 - **6 layers**: Entry/CLI -> Orchestrator -> Parsing -> Company Discovery -> Scraping -> Matching/Output
 - LangGraph used only inside CompanyFinderAgent and JobsScorerAgent for multi-step LLM reasoning
 - Top-level pipeline is a simple async sequential pipeline, NOT LangGraph
+- Temporal workflow available for durable execution with per-company parallel scraping
 
 ## Build & Run
 ```bash
@@ -26,10 +31,13 @@ make lint                                # ruff + mypy
 make run ARGS='resume.pdf --prefs "..."' # run with postgres + redis
 make run-trace ARGS='resume.pdf --prefs "..."' # run with OTLP tracing (Jaeger)
 make run-lite ARGS='resume.pdf --prefs "..." --dry-run'  # SQLite, no Docker
+make run-temporal ARGS='resume.pdf --prefs "..."'  # run via Temporal workflow
+make worker QUEUE=default                # start Temporal worker
 
 # Docker
 make dev                                 # start postgres + redis
 make dev-trace                           # start postgres + redis + Jaeger
+make dev-temporal                        # start postgres + redis + Temporal + UI
 make dev-down                            # stop infra
 make docker-build                        # build image
 make docker-run ARGS='--prefs "..."'     # run in full Docker (resume in data/)
@@ -40,18 +48,24 @@ make docker-run-lite ARGS='--prefs "..."' # run lite in Docker
 - `src/job_hunter_core/models/` — All Pydantic domain models
 - `src/job_hunter_core/config/settings.py` — pydantic-settings configuration
 - `src/job_hunter_agents/agents/` — All 8 agent implementations
-- `src/job_hunter_agents/orchestrator/pipeline.py` — Pipeline with checkpoints
+- `src/job_hunter_agents/orchestrator/pipeline.py` — Sequential async pipeline with checkpoints
 - `src/job_hunter_agents/prompts/` — Versioned LLM prompt templates
-- `src/job_hunter_agents/tools/` — PDF parser, ATS clients, scraper, search, embedder
+- `src/job_hunter_agents/tools/` — PDF parser, ATS clients, scraper, search (Tavily + DuckDuckGo), embedder, factories
+- `src/job_hunter_agents/observability/run_report.py` — Run report generation from OTEL spans
+- `src/job_hunter_core/interfaces/search.py` — SearchProvider Protocol
+- `src/job_hunter_core/interfaces/scraper.py` — PageScraper Protocol
 - `src/job_hunter_infra/db/` — SQLAlchemy ORM, repositories, migrations
 - `src/job_hunter_infra/cache/` — Redis + DB-backed cache implementations
-- `src/job_hunter_agents/orchestrator/pipeline.py` — Sequential async pipeline with checkpoints
 - `src/job_hunter_agents/orchestrator/checkpoint.py` — Checkpoint serialization/deserialization
+- `src/job_hunter_agents/orchestrator/temporal_workflow.py` — Temporal workflow definition
+- `src/job_hunter_agents/orchestrator/temporal_activities.py` — Temporal activity wrappers
+- `src/job_hunter_agents/orchestrator/temporal_orchestrator.py` — Temporal orchestrator with fallback
+- `src/job_hunter_agents/orchestrator/temporal_client.py` — Temporal client factory (mTLS, API key)
 - `src/job_hunter_cli/main.py` — typer CLI entrypoint
 
 ## Dependencies
 - **LLM**: Anthropic API (Claude Haiku + Sonnet) via `anthropic` + `instructor`
-- **Search**: Tavily API for web search
+- **Search**: Tavily API (production) or DuckDuckGo (free, integration tests) via `SearchProvider` Protocol
 - **Scraping**: crawl4ai + Playwright
 - **PDF**: docling (primary), pdfplumber (fallback)
 - **Database**: SQLAlchemy async, asyncpg (Postgres), aiosqlite (SQLite)
@@ -60,6 +74,7 @@ make docker-run-lite ARGS='--prefs "..."' # run lite in Docker
 - **Cache**: redis (default), DB-backed (fallback for --lite)
 - **Email**: SendGrid or SMTP via aiosmtplib
 - **CLI**: typer + rich
+- **Orchestration**: Temporal (optional, for durable workflows)
 - **Observability**: structlog, OpenTelemetry (Jaeger), LangSmith (optional), tenacity
 
 ## Conventions
@@ -94,8 +109,8 @@ Detailed component specs live in `docs/specs/`. Load only the spec(s) you need f
 | SPEC_11 | CLI, Makefile, Docker, CI, test mocks/fixtures |
 
 ## Known Issues / TODOs
-- Phases 0-10 complete (core, infra, tools, agents, pipeline, CLI, observability, testing, Docker, open source standards, integration & E2E testing)
-- Temporal orchestration deferred to Phase 2 (post-MVP)
+- Phases 0-13 complete (core, infra, tools, agents, pipeline, CLI, observability, testing, Docker, open source standards, integration & E2E testing, Temporal orchestration, vendor-agnostic abstractions)
+- Terraform IaC and Kubernetes manifests deferred to future
 - Web UI deferred to future
 
 ## Inter-Repo Dependencies
@@ -116,13 +131,19 @@ make test-e2e                  # run e2e + live tests
 make test-live                 # run live tests only
 ```
 - Unit tests: LLM calls mocked with MagicMock, HTTP mocked in-process
-- Integration tests: dry-run patches mock LLM/search/scraping, real DB + cache via Docker
+- Integration tests: two modes — dry-run patches (full mock) and integration patches (LLM/email/PDF only, real search/scraping/ATS/DB/cache)
+- Run reports: OTEL-based test reports showing component status (MOCK/REAL), agent timing, flow linkage
 - Live E2E tests: real APIs, company_limit=1, cost guardrail < $2.00
 - Fixtures: `tests/fixtures/` has sample PDF, LLM response JSONs, ATS responses, HTML
 - Fakes: `tests/mocks/mock_tools.py` (named tool fakes), `tests/mocks/mock_llm.py` (LLM dispatcher)
-- Coverage target: 80%
+- Coverage target: 90% (enforced in pre-commit hook, CI, and pyproject.toml)
+- Pre-commit hook mirrors CI: ruff check + ruff format + mypy + unit tests (90% coverage gate)
 
 ## Recent Changes
+- Phase 13: Vendor-agnostic tool abstractions + test infrastructure hardening — `SearchProvider` and `PageScraper` Protocol interfaces, DuckDuckGo search implementation (free, no API key), tool factory functions (`create_search_provider`, `create_page_scraper`), agents refactored to use factories, `activate_integration_patches()` for LLM-only mocking, `make_real_settings()` for real Postgres/Redis in tests, real scraping integration tests (`test_pipeline_real_scraping.py`), CI pipeline hardening (wait step, container health checks, env vars, artifact upload), run report generation from OTEL spans (`run_report.py`), `pipeline_tracing` fixture for auto-generating run reports in tests, spec files updated
+- Phase 12c: Production hardening — Pydantic v2 data converter for Temporal serialization, `result_type` on `execute_activity()` calls, `asyncio.gather(return_exceptions=True)` for resilient parallel scraping, `run_result` checkpoint serialization for output file persistence, embedded worker mode with `AsyncExitStack` + queue deduplication, Docker healthcheck fix for container networking, 90% coverage gate (pre-commit + CI + pyproject.toml), 11 new edge-case unit tests (328 total, 90%+ coverage)
+- Phase 12b: Pre-merge hardening — fixed Temporal workflow determinism (`workflow.time()` not `time.monotonic()`), added mypy to pre-commit hook matching CI, aligned ruff version in `.pre-commit-config.yaml` with lockfile (v0.15.2), fixed misleading docstrings, refactored 70-line `run()` into loop-based pattern, split 432-line test file, lazy Temporal health check in conftest (no 30s penalty), fixed resource leak in `check_temporal_available`, proper TLS misconfiguration warning, derive workflow status from errors (`partial` vs `success`), log non-dict errors instead of silently dropping, fixed weak CLI test assertion
+- Phase 12: Temporal orchestration — Temporal workflow/activities wrapping existing agents, per-company parallel scraping, TemporalOrchestrator (no silent fallback, raises `TemporalConnectionError`), Temporal client factory (plain TCP/mTLS/API key auth), worker CLI command (`job-hunter worker --queue`), docker-compose Temporal service + UI, `make dev-temporal` / `make run-temporal` / `make worker`, unit tests (client, workflow, orchestrator, activities), integration tests, `--temporal` CLI flag, Temporal as CI service container with E2E validation
 - Phase 11: Component spec files — 11 spec files in `docs/specs/` + `docs/SPEC_INDEX.md` for AI context switching. Each spec documents public API, data flow, dependencies, configuration, error handling, testing, and modification patterns.
 - Phase 10b: OTEL tracing wiring — pipeline produces root span + per-agent child spans with cost/error attributes, `get_tracer()` / `configure_tracing_with_exporter()` / `disable_tracing()` helpers, `--trace` CLI flag for OTLP, Jaeger in docker-compose (trace profile), `make dev-trace` / `make run-trace`, InMemorySpanExporter integration tests, 4 new unit tests for tracing helpers
 - Phase 10: Integration & E2E testing — fixture data (sample_resume.pdf, LLM/ATS/search/HTML fixtures), named fake tools (mock_tools.py), FakeLLMDispatcher (mock_llm.py), dry-run module (dryrun.py), CLI --dry-run mocks all externals, integration tests (DB repos, Redis cache, pipeline dry-run, checkpoint persistence, CLI dry-run), live E2E tests with cost guardrails, Makefile targets (test-e2e, test-live), e2e pytest marker

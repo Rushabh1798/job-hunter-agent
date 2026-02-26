@@ -8,6 +8,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Temporal workflow orchestration as alternative to sequential pipeline (`--temporal` CLI flag)
+- `TemporalOrchestrator` with embedded worker mode for single-process deployment
+- `JobHuntWorkflow` with per-activity retry policies, task queue routing, parallel company scraping
+- Temporal activities wrapping all 8 pipeline agents with token/cost delta tracking
+- Pydantic v2 data converter for correct Temporal serialization/deserialization
+- `TemporalConnectionError` exception with CLI error handling (no silent fallback)
+- Docker Compose `temporal` profile with `temporalio/auto-setup` service
+- Temporal as CI service container with E2E dry-run validation
+- `PipelineState.run_result` checkpoint serialization for output file persistence across Temporal roundtrips
+- `asyncio.gather(return_exceptions=True)` for resilient parallel company scraping
+- Comprehensive Temporal unit tests: orchestrator, workflow, activities, embedded worker mode, queue dedup
+- Integration tests for Temporal pipeline (full pipeline, output files, cost tracking, CLI flag)
 - Pipeline OTEL tracing: root span + per-agent child spans with cost/error/token attributes
 - Tracing helpers: `get_tracer()`, `configure_tracing_with_exporter()`, `disable_tracing()`
 - CLI `--trace` flag for OTLP tracing to Jaeger

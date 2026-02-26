@@ -27,6 +27,7 @@ def temporal_settings(mock_settings: MagicMock) -> MagicMock:
     mock_settings.temporal_tls_key_path = None
     mock_settings.temporal_api_key = None
     mock_settings.temporal_workflow_timeout_seconds = 1800
+    mock_settings.temporal_embedded_worker = False
     return mock_settings
 
 

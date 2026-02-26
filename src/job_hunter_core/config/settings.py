@@ -239,6 +239,10 @@ class Settings(BaseSettings):
         default=1800,
         description="Total workflow execution timeout in seconds",
     )
+    temporal_embedded_worker: bool = Field(
+        default=False,
+        description="Start in-process Temporal workers alongside workflow execution",
+    )
 
     # --- Agent Execution ---
     agent_timeout_seconds: int = Field(

@@ -23,9 +23,19 @@ from job_hunter_agents.orchestrator.temporal_payloads import (
     StepResult,
 )
 
+_settings_override: Settings | None = None
+
+
+def set_settings_override(settings: Settings | None) -> None:
+    """Set a module-level settings override for embedded worker mode."""
+    global _settings_override
+    _settings_override = settings
+
 
 def _get_settings() -> Settings:
-    """Load settings from worker environment (new instance per call)."""
+    """Load settings — uses override if set, otherwise from environment."""
+    if _settings_override is not None:
+        return _settings_override
     from job_hunter_core.config.settings import Settings
 
     return Settings()  # type: ignore[call-arg]

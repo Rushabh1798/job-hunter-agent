@@ -6,6 +6,8 @@ The checkpoint-based Pipeline is used only when orchestrator != "temporal".
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from datetime import timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -18,6 +20,8 @@ from job_hunter_agents.orchestrator.temporal_workflow import JobHuntWorkflow
 from job_hunter_core.models.run import RunResult
 
 if TYPE_CHECKING:
+    from temporalio.client import Client
+
     from job_hunter_core.config.settings import Settings
     from job_hunter_core.models.run import RunConfig
 
@@ -40,9 +44,18 @@ class TemporalOrchestrator:
         """Execute the pipeline via Temporal workflow.
 
         Raises TemporalConnectionError if the server is unreachable.
+        When ``temporal_embedded_worker`` is True, starts in-process
+        workers for all task queues alongside the workflow.
         """
         client = await create_temporal_client(self.settings)
 
+        if self.settings.temporal_embedded_worker:
+            async with self._start_embedded_workers(client):
+                return await self._execute_workflow(client, config)
+        return await self._execute_workflow(client, config)
+
+    async def _execute_workflow(self, client: Client, config: RunConfig) -> RunResult:
+        """Submit workflow and wait for result."""
         workflow_input = self._build_input(config)
         timeout = timedelta(seconds=self.settings.temporal_workflow_timeout_seconds)
 
@@ -60,6 +73,45 @@ class TemporalOrchestrator:
             status=output.status,
         )
         return self._to_run_result(output, config.run_id)
+
+    @asynccontextmanager
+    async def _start_embedded_workers(self, client: Client) -> AsyncIterator[None]:
+        """Start in-process workers for all task queues."""
+        from contextlib import AsyncExitStack
+
+        from temporalio.worker import Worker
+
+        from job_hunter_agents.orchestrator.temporal_activities import (
+            ALL_ACTIVITIES,
+            set_settings_override,
+        )
+
+        # Share settings with activities (avoids re-loading from env)
+        set_settings_override(self.settings)
+
+        queues = list(
+            {
+                self.settings.temporal_task_queue,
+                self.settings.temporal_llm_task_queue,
+                self.settings.temporal_scraping_task_queue,
+            }
+        )
+
+        logger.info("embedded_workers_starting", queues=queues)
+
+        try:
+            async with AsyncExitStack() as stack:
+                for q in queues:
+                    worker = Worker(
+                        client,
+                        task_queue=q,
+                        workflows=[JobHuntWorkflow],
+                        activities=ALL_ACTIVITIES,
+                    )
+                    await stack.enter_async_context(worker)
+                yield
+        finally:
+            set_settings_override(None)
 
     def _build_input(self, config: RunConfig) -> WorkflowInput:
         """Convert RunConfig to WorkflowInput."""

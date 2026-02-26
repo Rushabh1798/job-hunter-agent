@@ -23,22 +23,26 @@ pytestmark = pytest.mark.integration
 
 FIXTURE_RESUME = Path(__file__).parent.parent / "fixtures" / "sample_resume.pdf"
 
+# Use a single queue for all activity types in tests (simplifies worker setup)
+_TEST_QUEUE = "test-integration"
+
 
 def _make_temporal_settings(**overrides: object) -> MagicMock:
-    """Create settings pointing to local Temporal."""
+    """Create settings pointing to local Temporal with embedded worker."""
     from tests.mocks.mock_settings import make_settings
 
     defaults: dict[str, object] = {
         "orchestrator": "temporal",
         "temporal_address": "localhost:7233",
         "temporal_namespace": "default",
-        "temporal_task_queue": "test-default",
-        "temporal_llm_task_queue": "test-llm",
-        "temporal_scraping_task_queue": "test-scraping",
+        "temporal_task_queue": _TEST_QUEUE,
+        "temporal_llm_task_queue": _TEST_QUEUE,
+        "temporal_scraping_task_queue": _TEST_QUEUE,
         "temporal_tls_cert_path": None,
         "temporal_tls_key_path": None,
         "temporal_api_key": None,
         "temporal_workflow_timeout_seconds": 120,
+        "temporal_embedded_worker": True,
     }
     defaults.update(overrides)
     return make_settings(**defaults)
@@ -191,6 +195,7 @@ def test_cli_temporal_flag_succeeds_with_server() -> None:
         env={
             "JH_ANTHROPIC_API_KEY": "fake-key",
             "JH_TAVILY_API_KEY": "fake-key",
+            "JH_TEMPORAL_EMBEDDED_WORKER": "true",
         },
     )
     assert result.exit_code == 0, (
@@ -211,7 +216,10 @@ async def test_temporal_raises_when_server_unavailable() -> None:
     from job_hunter_core.exceptions import TemporalConnectionError
     from tests.mocks.mock_factories import make_run_config
 
-    settings = _make_temporal_settings(temporal_address="localhost:19999")
+    settings = _make_temporal_settings(
+        temporal_address="localhost:19999",
+        temporal_embedded_worker=False,
+    )
 
     orchestrator = TemporalOrchestrator(settings)
     config = make_run_config()

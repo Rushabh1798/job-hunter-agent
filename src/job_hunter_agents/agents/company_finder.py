@@ -118,6 +118,7 @@ class CompanyFinderAgent(BaseAgent):
                         company_sizes=", ".join(prefs.company_sizes) or "Any",
                         excluded_companies=", ".join(prefs.excluded_companies) or "None",
                         preferred_companies=", ".join(prefs.preferred_companies) or "None",
+                        salary_currency=prefs.currency,
                     ),
                 },
             ],

@@ -14,6 +14,11 @@ search preferences, generate a list of real companies that would be good targets
 - Provide the company's primary domain (e.g., stripe.com, not www.stripe.com)
 - Do NOT suggest companies the candidate listed in excluded_companies
 - If preferred_companies are specified, prioritize those
+- When preferred locations include cities in India (Bangalore, Mumbai, Delhi, Hyderabad, \
+Pune, Chennai, etc.), prioritize companies with strong India engineering offices
+- Prefer companies that use standard ATS systems (Greenhouse, Lever, Ashby, Workday) \
+as these have more accessible job listings
+- Include direct career page domains when known (e.g., careers.google.com)
 </rules>
 """
 
@@ -37,6 +42,7 @@ Organization Types: {org_types}
 Company Sizes: {company_sizes}
 Excluded Companies: {excluded_companies}
 Preferred Companies: {preferred_companies}
+Salary Currency: {salary_currency}
 </search_preferences>
 
 Generate 20-30 target companies. For each, provide:

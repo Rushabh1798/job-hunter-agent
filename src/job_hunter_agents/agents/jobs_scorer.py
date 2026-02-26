@@ -18,6 +18,21 @@ logger = structlog.get_logger()
 
 BATCH_SIZE = 5
 
+_CURRENCY_SYMBOLS: dict[str, str] = {
+    "USD": "$",
+    "INR": "₹",
+    "EUR": "€",
+    "GBP": "£",
+    "CAD": "C$",
+    "AUD": "A$",
+    "SGD": "S$",
+}
+
+
+def _currency_symbol(currency: str) -> str:
+    """Return the symbol for a currency code, or the code itself as prefix."""
+    return _CURRENCY_SYMBOLS.get(currency.upper(), f"{currency} ")
+
 
 class JobScore(BaseModel):
     """Single job scoring result from LLM."""
@@ -94,11 +109,13 @@ class JobsScorerAgent(BaseAgent):
         assert prefs is not None
 
         jobs_block = self._format_jobs_block(jobs)
+        currency = prefs.currency or "USD"
+        symbol = _currency_symbol(currency)
         salary_range = "Not specified"
         if prefs.min_salary and prefs.max_salary:
-            salary_range = f"${prefs.min_salary:,}-${prefs.max_salary:,}"
+            salary_range = f"{symbol}{prefs.min_salary:,}-{symbol}{prefs.max_salary:,} {currency}"
         elif prefs.min_salary:
-            salary_range = f"${prefs.min_salary:,}+"
+            salary_range = f"{symbol}{prefs.min_salary:,}+ {currency}"
 
         result = await self._call_llm(
             messages=[
@@ -153,7 +170,9 @@ class JobsScorerAgent(BaseAgent):
         for i, job in enumerate(jobs):
             salary = "Not specified"
             if job.salary_min and job.salary_max:
-                salary = f"${job.salary_min:,}-${job.salary_max:,}"
+                sym = _currency_symbol(job.currency or "USD")
+                cur = job.currency or "USD"
+                salary = f"{sym}{job.salary_min:,}-{sym}{job.salary_max:,} {cur}"
 
             blocks.append(
                 f'<job index="{i}">\n'

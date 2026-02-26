@@ -12,6 +12,7 @@ from job_hunter_agents.agents.jobs_scorer import (
     BatchScoreResult,
     JobScore,
     JobsScorerAgent,
+    _currency_symbol,
 )
 from job_hunter_core.models.candidate import CandidateProfile, SearchPreferences, Skill
 from job_hunter_core.models.job import NormalizedJob
@@ -20,7 +21,12 @@ from job_hunter_core.state import PipelineState
 from tests.mocks.mock_settings import make_settings
 
 
-def _make_normalized_job(title: str = "SWE") -> NormalizedJob:
+def _make_normalized_job(
+    title: str = "SWE",
+    salary_min: int | None = None,
+    salary_max: int | None = None,
+    currency: str | None = None,
+) -> NormalizedJob:
     """Create a test normalized job."""
     return NormalizedJob(
         raw_job_id=uuid4(),
@@ -30,10 +36,17 @@ def _make_normalized_job(title: str = "SWE") -> NormalizedJob:
         jd_text="Looking for a great developer...",
         apply_url="https://testco.com/apply",
         content_hash="hash123",
+        salary_min=salary_min,
+        salary_max=salary_max,
+        currency=currency,
     )
 
 
-def _make_state_with_jobs() -> PipelineState:
+def _make_state_with_jobs(
+    currency: str = "USD",
+    min_salary: int | None = None,
+    max_salary: int | None = None,
+) -> PipelineState:
     """Create state with profile, prefs, and jobs."""
     state = PipelineState(
         config=RunConfig(
@@ -49,7 +62,12 @@ def _make_state_with_jobs() -> PipelineState:
         raw_text="test",
         content_hash="abc",
     )
-    state.preferences = SearchPreferences(raw_text="test")
+    state.preferences = SearchPreferences(
+        raw_text="test",
+        currency=currency,
+        min_salary=min_salary,
+        max_salary=max_salary,
+    )
     state.normalized_jobs = [
         _make_normalized_job("SWE"),
         _make_normalized_job("Senior SWE"),
@@ -158,3 +176,78 @@ class TestJobsScorerAgent:
         assert "Test Role" in block
         assert "TestCo" in block
         assert 'index="0"' in block
+
+    def test_format_jobs_block_with_inr_salary(self) -> None:
+        """Jobs block formats INR salary with rupee symbol."""
+        settings = make_settings()
+        agent = JobsScorerAgent(settings)
+        jobs = [
+            _make_normalized_job(
+                "SWE",
+                salary_min=2000000,
+                salary_max=3500000,
+                currency="INR",
+            )
+        ]
+        block = agent._format_jobs_block(jobs)
+
+        assert "₹2,000,000" in block
+        assert "₹3,500,000" in block
+        assert "INR" in block
+        assert "$" not in block
+
+    @pytest.mark.asyncio
+    async def test_inr_salary_range_in_prompt(self) -> None:
+        """INR salary range uses rupee symbol in scorer prompt."""
+        settings = make_settings()
+        state = _make_state_with_jobs(
+            currency="INR",
+            min_salary=3500000,
+            max_salary=5000000,
+        )
+
+        captured_messages: list[dict[str, str]] = []
+
+        async def _capture_llm(
+            messages: list[dict[str, str]], **kwargs: object
+        ) -> BatchScoreResult:
+            captured_messages.extend(messages)
+            return BatchScoreResult(scores=[])
+
+        with patch.object(
+            JobsScorerAgent,
+            "_call_llm",
+            side_effect=_capture_llm,
+        ):
+            agent = JobsScorerAgent(settings)
+            await agent.run(state)
+
+        prompt_content = captured_messages[0]["content"]
+        assert "₹3,500,000" in prompt_content
+        assert "₹5,000,000" in prompt_content
+        assert "INR" in prompt_content
+
+
+@pytest.mark.unit
+class TestCurrencySymbol:
+    """Test _currency_symbol helper."""
+
+    def test_usd(self) -> None:
+        """USD returns dollar sign."""
+        assert _currency_symbol("USD") == "$"
+
+    def test_inr(self) -> None:
+        """INR returns rupee sign."""
+        assert _currency_symbol("INR") == "₹"
+
+    def test_eur(self) -> None:
+        """EUR returns euro sign."""
+        assert _currency_symbol("EUR") == "€"
+
+    def test_unknown_currency(self) -> None:
+        """Unknown currency returns code with space."""
+        assert _currency_symbol("JPY") == "JPY "
+
+    def test_case_insensitive(self) -> None:
+        """Currency code lookup is case-insensitive."""
+        assert _currency_symbol("inr") == "₹"

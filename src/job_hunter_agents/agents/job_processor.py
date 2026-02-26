@@ -23,6 +23,13 @@ class ExtractedJob(BaseModel):
 
     title: str = Field(description="Job title")
     jd_text: str = Field(description="Full job description")
+    is_valid_posting: bool = Field(
+        default=True,
+        description=(
+            "True if this is a specific job posting with one title and description. "
+            "False if it is a career landing page, company overview, or list of many jobs."
+        ),
+    )
     location: str | None = Field(default=None, description="Location")
     remote_type: str = Field(default="unknown", description="Remote type")
     salary_min: int | None = Field(default=None, description="Min salary")
@@ -132,6 +139,15 @@ class JobProcessorAgent(BaseAgent):
             model=self.settings.haiku_model,
             response_model=ExtractedJob,
         )
+
+        if not extracted.is_valid_posting:
+            logger.warning(
+                "skipping_non_job_content",
+                company=raw_job.company_name,
+                title=extracted.title,
+                source_url=str(raw_job.source_url),
+            )
+            return None
 
         content_hash = self._compute_hash(raw_job.company_name, extracted.title, extracted.jd_text)
 

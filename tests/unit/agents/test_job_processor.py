@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 from pathlib import Path
+from unittest.mock import AsyncMock, patch
 from uuid import uuid4
 
 import pytest
 
-from job_hunter_agents.agents.job_processor import JobProcessorAgent
+from job_hunter_agents.agents.job_processor import ExtractedJob, JobProcessorAgent
 from job_hunter_core.models.job import RawJob
 from job_hunter_core.models.run import RunConfig
 from job_hunter_core.state import PipelineState
@@ -117,3 +118,64 @@ class TestJobProcessorAgent:
         h2 = agent._compute_hash("Stripe", "SWE", "desc")
         assert h1 == h2
         assert len(h1) == 64
+
+    @pytest.mark.asyncio
+    async def test_skips_invalid_posting(self) -> None:
+        """HTML content identified as landing page is skipped."""
+        settings = make_settings()
+        state = PipelineState(
+            config=RunConfig(
+                resume_path=Path("/tmp/test.pdf"),
+                preferences_text="test",
+            )
+        )
+        state.raw_jobs = [_make_raw_job_html()]
+
+        fake_extracted = ExtractedJob(
+            title="Careers at Acme",
+            jd_text="We are hiring across multiple teams...",
+            is_valid_posting=False,
+        )
+
+        with patch.object(
+            JobProcessorAgent,
+            "_call_llm",
+            new_callable=AsyncMock,
+            return_value=fake_extracted,
+        ):
+            agent = JobProcessorAgent(settings)
+            result = await agent.run(state)
+
+        assert len(result.normalized_jobs) == 0
+
+    @pytest.mark.asyncio
+    async def test_accepts_valid_posting(self) -> None:
+        """HTML content identified as valid posting is processed."""
+        settings = make_settings()
+        state = PipelineState(
+            config=RunConfig(
+                resume_path=Path("/tmp/test.pdf"),
+                preferences_text="test",
+            )
+        )
+        state.raw_jobs = [_make_raw_job_html()]
+
+        fake_extracted = ExtractedJob(
+            title="Senior Python Developer",
+            jd_text="We need a senior Python developer with 5+ years...",
+            is_valid_posting=True,
+            location="San Francisco",
+            required_skills=["Python", "Django"],
+        )
+
+        with patch.object(
+            JobProcessorAgent,
+            "_call_llm",
+            new_callable=AsyncMock,
+            return_value=fake_extracted,
+        ):
+            agent = JobProcessorAgent(settings)
+            result = await agent.run(state)
+
+        assert len(result.normalized_jobs) == 1
+        assert result.normalized_jobs[0].title == "Senior Python Developer"

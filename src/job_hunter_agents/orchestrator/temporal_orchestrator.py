@@ -1,7 +1,7 @@
 """Temporal orchestrator — starts workflow and waits for result.
 
-Falls back transparently to the checkpoint-based Pipeline if
-Temporal is unreachable.
+Raises TemporalConnectionError if the server is unreachable.
+The checkpoint-based Pipeline is used only when orchestrator != "temporal".
 """
 
 from __future__ import annotations
@@ -15,7 +15,6 @@ import structlog
 from job_hunter_agents.orchestrator.temporal_client import create_temporal_client
 from job_hunter_agents.orchestrator.temporal_payloads import WorkflowInput, WorkflowOutput
 from job_hunter_agents.orchestrator.temporal_workflow import JobHuntWorkflow
-from job_hunter_core.exceptions import TemporalConnectionError
 from job_hunter_core.models.run import RunResult
 
 if TYPE_CHECKING:
@@ -28,8 +27,9 @@ logger = structlog.get_logger()
 class TemporalOrchestrator:
     """Start a Temporal workflow and wait for the result.
 
-    If Temporal is unreachable, falls back to the checkpoint-based
-    Pipeline orchestrator automatically.
+    Raises ``TemporalConnectionError`` if the server is unreachable.
+    JSON-checkpoint fallback only applies when the user does not
+    enable Temporal (i.e. omits ``--temporal``).
     """
 
     def __init__(self, settings: Settings) -> None:
@@ -39,16 +39,9 @@ class TemporalOrchestrator:
     async def run(self, config: RunConfig) -> RunResult:
         """Execute the pipeline via Temporal workflow.
 
-        Falls back to checkpoint Pipeline on connection failure.
+        Raises TemporalConnectionError if the server is unreachable.
         """
-        try:
-            client = await create_temporal_client(self.settings)
-        except TemporalConnectionError:
-            logger.warning(
-                "temporal_unavailable_falling_back",
-                address=self.settings.temporal_address,
-            )
-            return await self._fallback(config)
+        client = await create_temporal_client(self.settings)
 
         workflow_input = self._build_input(config)
         timeout = timedelta(seconds=self.settings.temporal_workflow_timeout_seconds)
@@ -67,13 +60,6 @@ class TemporalOrchestrator:
             status=output.status,
         )
         return self._to_run_result(output, config.run_id)
-
-    async def _fallback(self, config: RunConfig) -> RunResult:
-        """Fall back to checkpoint-based Pipeline."""
-        from job_hunter_agents.orchestrator.pipeline import Pipeline
-
-        pipeline = Pipeline(self.settings)
-        return await pipeline.run(config)
 
     def _build_input(self, config: RunConfig) -> WorkflowInput:
         """Convert RunConfig to WorkflowInput."""

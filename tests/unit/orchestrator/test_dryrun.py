@@ -45,9 +45,7 @@ class TestActivateDryRunPatches:
 
         stack = activate_dry_run_patches()
         try:
-            factory = _get_attr(
-                "job_hunter_agents.agents.company_finder", "create_search_provider"
-            )
+            factory = _get_attr("job_hunter_agents.agents.company_finder", "create_search_provider")
             # Factory was patched to a lambda that returns FakeWebSearchTool()
             instance = factory(None)
             assert isinstance(instance, FakeWebSearchTool)
@@ -70,9 +68,7 @@ class TestActivateDryRunPatches:
 
         stack = activate_dry_run_patches()
         try:
-            factory = _get_attr(
-                "job_hunter_agents.agents.jobs_scraper", "create_page_scraper"
-            )
+            factory = _get_attr("job_hunter_agents.agents.jobs_scraper", "create_page_scraper")
             # Factory was patched to FakeWebScraper (callable class)
             instance = factory()
             assert isinstance(instance, FakeWebScraper)

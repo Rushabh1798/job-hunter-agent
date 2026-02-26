@@ -101,6 +101,18 @@ def run(
 
     try:
         result = asyncio.run(_run_pipeline(settings, config))
+    except Exception as exc:
+        # Surface Temporal connection failures with a clear message
+        from job_hunter_core.exceptions import TemporalConnectionError
+
+        if isinstance(exc, TemporalConnectionError):
+            console.print(
+                f"[red]Error:[/red] Temporal server unreachable at "
+                f"{settings.temporal_address}. Start it with `make dev-temporal` "
+                f"or omit --temporal to use checkpoint mode.",
+            )
+            raise typer.Exit(code=1) from exc
+        raise
     finally:
         if patch_stack is not None:
             patch_stack.close()

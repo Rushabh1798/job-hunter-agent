@@ -1,4 +1,4 @@
-"""Unit tests for Temporal orchestrator with fallback logic."""
+"""Unit tests for Temporal orchestrator."""
 
 from __future__ import annotations
 
@@ -79,45 +79,17 @@ async def test_run_success_via_temporal(temporal_settings: MagicMock) -> None:
 
 
 @pytest.mark.asyncio
-async def test_run_falls_back_on_connection_error(temporal_settings: MagicMock) -> None:
-    """Falls back to checkpoint Pipeline when Temporal is unreachable."""
-    fallback_result = RunResult(
-        run_id="test",
-        status="success",
-        companies_attempted=1,
-        companies_succeeded=1,
-        jobs_scraped=5,
-        jobs_scored=3,
-        jobs_in_output=3,
-        output_files=[],
-        email_sent=False,
-        errors=[],
-        total_tokens_used=100,
-        estimated_cost_usd=0.01,
-        duration_seconds=5.0,
-    )
-
-    mock_pipeline = AsyncMock()
-    mock_pipeline.run = AsyncMock(return_value=fallback_result)
-
-    with (
-        patch(
-            "job_hunter_agents.orchestrator.temporal_orchestrator.create_temporal_client",
-            side_effect=TemporalConnectionError("refused"),
-        ),
-        patch(
-            "job_hunter_agents.orchestrator.pipeline.Pipeline",
-            return_value=mock_pipeline,
-        ),
+async def test_run_raises_on_connection_error(temporal_settings: MagicMock) -> None:
+    """Raises TemporalConnectionError when Temporal is unreachable (no fallback)."""
+    with patch(
+        "job_hunter_agents.orchestrator.temporal_orchestrator.create_temporal_client",
+        side_effect=TemporalConnectionError("refused"),
     ):
         from job_hunter_agents.orchestrator.temporal_orchestrator import TemporalOrchestrator
 
         orchestrator = TemporalOrchestrator(temporal_settings)
-        result = await orchestrator.run(_make_run_config())
-
-        assert result.status == "success"
-        assert result.jobs_scraped == 5
-        mock_pipeline.run.assert_awaited_once()
+        with pytest.raises(TemporalConnectionError, match="refused"):
+            await orchestrator.run(_make_run_config())
 
 
 @pytest.mark.asyncio

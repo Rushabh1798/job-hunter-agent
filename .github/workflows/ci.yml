@@ -88,15 +88,6 @@ jobs:
           uv run job-hunter run tests/fixtures/sample_resume.pdf
           --prefs "Python backend remote roles at AI startups"
           --dry-run --company-limit 1
-      - name: E2E dry-run — Temporal pipeline (with fallback)
-        env:
-          JH_ANTHROPIC_API_KEY: fake-key
-          JH_TAVILY_API_KEY: fake-key
-          PYTHONPATH: .
-        run: >
-          uv run job-hunter run tests/fixtures/sample_resume.pdf
-          --prefs "Python backend remote roles at AI startups"
-          --dry-run --lite --company-limit 1 --temporal
       - name: Upload coverage
         uses: actions/upload-artifact@v4
         with:

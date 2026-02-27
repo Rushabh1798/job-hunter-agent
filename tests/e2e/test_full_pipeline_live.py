@@ -7,6 +7,7 @@ Run with: uv run pytest -m live
 from __future__ import annotations
 
 import os
+import shutil
 from pathlib import Path
 
 import pytest
@@ -21,10 +22,16 @@ FIXTURE_RESUME = Path(__file__).parent.parent / "fixtures" / "sample_resume.pdf"
 
 _has_anthropic_key = bool(os.environ.get("JH_ANTHROPIC_API_KEY"))
 _has_tavily_key = bool(os.environ.get("JH_TAVILY_API_KEY"))
+_has_claude_cli = shutil.which("claude") is not None
 
 skip_no_api_keys = pytest.mark.skipif(
     not (_has_anthropic_key and _has_tavily_key),
     reason="Live tests require JH_ANTHROPIC_API_KEY and JH_TAVILY_API_KEY",
+)
+
+skip_no_claude = pytest.mark.skipif(
+    not _has_claude_cli,
+    reason="local_claude tests require 'claude' CLI in PATH",
 )
 
 
@@ -74,3 +81,32 @@ class TestFullPipelineLive:
         assert result.total_tokens_used > 0
         assert result.estimated_cost_usd > 0
         assert result.estimated_cost_usd < 2.0
+
+
+@skip_no_claude
+class TestFullPipelineLocalClaude:
+    """Full pipeline with local_claude provider — free, no API key needed."""
+
+    async def test_local_claude_pipeline_completes(self, tmp_path: Path) -> None:
+        """Pipeline completes with local_claude + DuckDuckGo, company_limit=1."""
+        settings = Settings(  # type: ignore[call-arg]
+            llm_provider="local_claude",
+            anthropic_api_key=None,
+            tavily_api_key="unused",
+            search_provider="duckduckgo",
+            output_dir=tmp_path / "output",
+            checkpoint_dir=tmp_path / "checkpoints",
+            checkpoint_enabled=True,
+        )
+
+        config = RunConfig(
+            resume_path=FIXTURE_RESUME,
+            preferences_text="Python backend remote roles at AI startups",
+            dry_run=False,
+            company_limit=1,
+        )
+
+        pipeline = Pipeline(settings)
+        result = await pipeline.run(config)
+
+        assert result.status in ("success", "partial")

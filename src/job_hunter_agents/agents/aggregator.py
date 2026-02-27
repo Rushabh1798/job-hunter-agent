@@ -54,23 +54,37 @@ class AggregatorAgent(BaseAgent):
         return state
 
     def _build_rows(self, state: PipelineState) -> list[dict[str, object]]:
-        """Build output rows from scored jobs."""
-        rows: list[dict[str, object]] = []
+        """Build output rows from scored jobs (best job per company)."""
+        # Build company_id -> tier lookup
+        tier_map: dict[str, str] = {}
+        for company in state.companies:
+            tier_map[str(company.id)] = company.tier.value
+
+        # Deduplicate: keep only the highest-scored job per company
+        # (scored_jobs are already sorted by score descending)
+        seen_companies: set[str] = set()
+        deduped = []
         for sj in state.scored_jobs:
+            co_name = sj.job.company_name
+            if co_name in seen_companies:
+                continue
+            seen_companies.add(co_name)
+            deduped.append(sj)
+
+        rows: list[dict[str, object]] = []
+        for rank, sj in enumerate(deduped, start=1):
             job = sj.job
             report = sj.fit_report
-            salary = ""
-            if job.salary_min and job.salary_max:
-                salary = f"${job.salary_min:,}-${job.salary_max:,}"
-            elif job.salary_min:
-                salary = f"${job.salary_min:,}+"
+            salary = self._format_salary(job.salary_min, job.salary_max, job.currency)
+            tier = tier_map.get(str(job.company_id), "unknown")
 
             rows.append(
                 {
-                    "Rank": sj.rank,
+                    "Rank": rank,
                     "Score": report.score,
                     "Recommendation": report.recommendation,
                     "Company": job.company_name,
+                    "Company Tier": tier,
                     "Title": job.title,
                     "Location": job.location or "",
                     "Remote Type": job.remote_type,
@@ -83,6 +97,31 @@ class AggregatorAgent(BaseAgent):
                 }
             )
         return rows
+
+    @staticmethod
+    def _format_salary(
+        salary_min: int | None,
+        salary_max: int | None,
+        currency: str | None,
+    ) -> str:
+        """Format salary range with appropriate currency symbol."""
+        symbols: dict[str, str] = {
+            "USD": "$",
+            "INR": "₹",
+            "EUR": "€",
+            "GBP": "£",
+            "CAD": "C$",
+            "AUD": "A$",
+            "SGD": "S$",
+        }
+        cur = (currency or "USD").upper()
+        sym = symbols.get(cur, f"{cur} ")
+
+        if salary_min and salary_max:
+            return f"{sym}{salary_min:,}-{sym}{salary_max:,} {cur}"
+        if salary_min:
+            return f"{sym}{salary_min:,}+ {cur}"
+        return ""
 
     def _write_csv(self, rows: list[dict[str, object]], path: Path) -> None:
         """Write rows to CSV file."""
@@ -131,8 +170,8 @@ class AggregatorAgent(BaseAgent):
                 elif cell.value >= 60:
                     cell.fill = yellow
 
-        # Make Apply URL column hyperlinked
-        url_col = 13  # Column M
+        # Make Apply URL column hyperlinked (14th column with Company Tier added)
+        url_col = 14  # Column N
         for row_idx in range(2, ws.max_row + 1):
             cell = ws.cell(row=row_idx, column=url_col)
             if cell.value:

@@ -53,6 +53,9 @@ class _MockAgent:
         state.total_cost_usd += 0.01  # type: ignore[attr-defined]
         return state
 
+    async def close(self) -> None:
+        """No-op cleanup."""
+
 
 @pytest.mark.asyncio
 async def test_parse_resume_activity_calls_agent() -> None:
@@ -240,6 +243,9 @@ async def test_scrape_company_activity() -> None:
             raw = make_raw_job(company_id=state.companies[0].id)  # type: ignore[attr-defined]
             state.raw_jobs = [raw]  # type: ignore[attr-defined]
             return state
+
+        async def close(self) -> None:
+            pass
 
     with (
         patch(

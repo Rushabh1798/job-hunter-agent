@@ -11,21 +11,7 @@ from job_hunter_agents.agents.notifier import NotifierAgent
 from job_hunter_core.models.candidate import CandidateProfile, Skill
 from job_hunter_core.models.run import RunConfig, RunResult
 from job_hunter_core.state import PipelineState
-
-
-def _make_settings() -> AsyncMock:
-    """Create mock settings."""
-    settings = AsyncMock()
-    settings.anthropic_api_key.get_secret_value.return_value = "test-key"
-    settings.email_provider = "smtp"
-    settings.smtp_host = "smtp.test.com"
-    settings.smtp_port = 587
-    settings.smtp_user = "user@test.com"
-    settings.smtp_password.get_secret_value.return_value = "pass"
-    settings.sendgrid_api_key = None
-    settings.max_cost_per_run_usd = 5.0
-    settings.warn_cost_threshold_usd = 2.0
-    return settings
+from tests.mocks.mock_settings import make_settings
 
 
 def _make_state() -> PipelineState:
@@ -69,16 +55,16 @@ class TestNotifierAgent:
     @pytest.mark.asyncio
     async def test_dry_run_skips_email(self) -> None:
         """Dry run mode skips email sending."""
-        settings = _make_settings()
+        settings = make_settings(
+            email_provider="smtp",
+            smtp_host="smtp.test.com",
+            smtp_port=587,
+        )
         state = _make_state()
         state.config.dry_run = True
 
-        with (
-            patch("job_hunter_agents.agents.base.AsyncAnthropic"),
-            patch("job_hunter_agents.agents.base.instructor"),
-        ):
-            agent = NotifierAgent(settings)
-            result = await agent.run(state)
+        agent = NotifierAgent(settings)
+        result = await agent.run(state)
 
         assert result.run_result is not None
         assert result.run_result.email_sent is False
@@ -86,14 +72,14 @@ class TestNotifierAgent:
     @pytest.mark.asyncio
     async def test_sends_email(self) -> None:
         """Agent sends email via EmailSender."""
-        settings = _make_settings()
+        settings = make_settings(
+            email_provider="smtp",
+            smtp_host="smtp.test.com",
+            smtp_port=587,
+        )
         state = _make_state()
 
-        with (
-            patch("job_hunter_agents.agents.notifier.EmailSender") as mock_sender_cls,
-            patch("job_hunter_agents.agents.base.AsyncAnthropic"),
-            patch("job_hunter_agents.agents.base.instructor"),
-        ):
+        with patch("job_hunter_agents.agents.notifier.EmailSender") as mock_sender_cls:
             mock_sender = mock_sender_cls.return_value
             mock_sender.send = AsyncMock(return_value=True)
 
@@ -107,14 +93,14 @@ class TestNotifierAgent:
     @pytest.mark.asyncio
     async def test_email_failure_recorded(self) -> None:
         """Email failure is recorded but doesn't crash pipeline."""
-        settings = _make_settings()
+        settings = make_settings(
+            email_provider="smtp",
+            smtp_host="smtp.test.com",
+            smtp_port=587,
+        )
         state = _make_state()
 
-        with (
-            patch("job_hunter_agents.agents.notifier.EmailSender") as mock_sender_cls,
-            patch("job_hunter_agents.agents.base.AsyncAnthropic"),
-            patch("job_hunter_agents.agents.base.instructor"),
-        ):
+        with patch("job_hunter_agents.agents.notifier.EmailSender") as mock_sender_cls:
             mock_sender = mock_sender_cls.return_value
             mock_sender.send = AsyncMock(side_effect=RuntimeError("SMTP error"))
 

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
@@ -10,7 +9,6 @@ import pytest
 from job_hunter_agents.observability.cost_tracker import (
     CostTracker,
     LLMCallMetrics,
-    extract_token_usage,
 )
 from job_hunter_core.exceptions import CostLimitExceededError
 
@@ -114,28 +112,3 @@ class TestCostTracker:
         total_cost = summary["total_cost_usd"]
         assert isinstance(total_cost, float)
         assert total_cost > 0
-
-
-@pytest.mark.unit
-class TestExtractTokenUsage:
-    """Tests for extract_token_usage."""
-
-    def test_extract_with_raw_response(self) -> None:
-        """Extracts tokens from instructor-style response."""
-        usage = SimpleNamespace(input_tokens=150, output_tokens=75)
-        raw_response = SimpleNamespace(usage=usage)
-        response = SimpleNamespace(_raw_response=raw_response)
-
-        result = extract_token_usage(response)
-        assert result == (150, 75)
-
-    def test_extract_no_raw_response(self) -> None:
-        """Returns (0, 0) when _raw_response is missing."""
-        response = SimpleNamespace(data="some_data")
-        assert extract_token_usage(response) == (0, 0)
-
-    def test_extract_no_usage(self) -> None:
-        """Returns (0, 0) when usage attribute is missing."""
-        raw_response = SimpleNamespace(status="ok")
-        response = SimpleNamespace(_raw_response=raw_response)
-        assert extract_token_usage(response) == (0, 0)

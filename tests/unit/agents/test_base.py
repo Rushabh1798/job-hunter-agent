@@ -5,6 +5,9 @@ from __future__ import annotations
 from unittest.mock import AsyncMock, patch
 
 import pytest
+from llm_gateway import FakeLLMProvider, GatewayConfig, LLMClient  # type: ignore[import-untyped]
+from llm_gateway.cost import build_token_usage  # type: ignore[import-untyped]
+from llm_gateway.types import TokenUsage  # type: ignore[import-untyped]
 from pydantic import BaseModel
 
 from job_hunter_agents.agents.base import BaseAgent
@@ -31,13 +34,21 @@ class _StubAgent(BaseAgent):
 
 
 def _create_stub_agent(**settings_overrides: object) -> _StubAgent:
-    """Instantiate _StubAgent with patched AsyncAnthropic + instructor."""
+    """Instantiate _StubAgent with fake LLM provider (no patches needed)."""
     settings = make_settings(**settings_overrides)
-    with (
-        patch("job_hunter_agents.agents.base.AsyncAnthropic"),
-        patch("job_hunter_agents.agents.base.instructor"),
-    ):
-        return _StubAgent(settings)
+    return _StubAgent(settings)
+
+
+def _make_fake_llm_client(response: object | None = None) -> tuple[LLMClient, FakeLLMProvider]:
+    """Build a FakeLLMProvider-backed LLMClient for test injection."""
+    provider = FakeLLMProvider(default_input_tokens=100, default_output_tokens=50)
+    if response is not None:
+        provider.set_response(type(response), response)
+    client = LLMClient(
+        config=GatewayConfig(provider="fake", trace_enabled=False, log_format="console"),
+        provider_instance=provider,
+    )
+    return client, provider
 
 
 @pytest.mark.unit
@@ -46,56 +57,30 @@ class TestCallLLM:
 
     @pytest.mark.asyncio
     async def test_call_llm_returns_response(self) -> None:
-        """instructor.messages.create result is returned."""
-        agent = _create_stub_agent()
+        """LLMClient.complete result content is returned."""
         expected = _DummyResponse(answer="hello")
-        agent._instructor.messages.create = AsyncMock(return_value=expected)
+        client, _provider = _make_fake_llm_client(expected)
+        agent = _create_stub_agent()
+        agent._llm_client = client
 
-        with patch(
-            "job_hunter_agents.agents.base.extract_token_usage",
-            return_value=(10, 20),
-        ):
-            result = await agent._call_llm(
-                messages=[{"role": "user", "content": "test"}],
-                model="claude-haiku-4-5-20251001",
-                response_model=_DummyResponse,
-            )
+        result = await agent._call_llm(
+            messages=[{"role": "user", "content": "test"}],
+            model="claude-haiku-4-5-20251001",
+            response_model=_DummyResponse,
+        )
 
         assert result.answer == "hello"
 
     @pytest.mark.asyncio
-    async def test_call_llm_extracts_tokens(self) -> None:
-        """extract_token_usage is called on the result."""
-        agent = _create_stub_agent()
-        response = _DummyResponse(answer="ok")
-        agent._instructor.messages.create = AsyncMock(return_value=response)
-
-        with patch(
-            "job_hunter_agents.agents.base.extract_token_usage",
-            return_value=(100, 200),
-        ) as mock_extract:
-            await agent._call_llm(
-                messages=[{"role": "user", "content": "test"}],
-                model="claude-haiku-4-5-20251001",
-                response_model=_DummyResponse,
-            )
-
-        mock_extract.assert_called_once_with(response)
-
-    @pytest.mark.asyncio
     async def test_call_llm_tracks_cost_with_state(self) -> None:
         """_track_cost is called when state is provided."""
+        expected = _DummyResponse(answer="ok")
+        client, _provider = _make_fake_llm_client(expected)
         agent = _create_stub_agent()
-        agent._instructor.messages.create = AsyncMock(return_value=_DummyResponse(answer="ok"))
+        agent._llm_client = client
         state = make_pipeline_state()
 
-        with (
-            patch(
-                "job_hunter_agents.agents.base.extract_token_usage",
-                return_value=(100, 50),
-            ),
-            patch.object(agent, "_track_cost") as mock_track,
-        ):
+        with patch.object(agent, "_track_cost") as mock_track:
             await agent._call_llm(
                 messages=[{"role": "user", "content": "test"}],
                 model="claude-haiku-4-5-20251001",
@@ -103,21 +88,20 @@ class TestCallLLM:
                 state=state,
             )
 
-        mock_track.assert_called_once_with(state, 100, 50, "claude-haiku-4-5-20251001")
+        mock_track.assert_called_once()
+        call_args = mock_track.call_args
+        assert call_args[0][0] is state
+        assert isinstance(call_args[0][1], TokenUsage)
 
     @pytest.mark.asyncio
     async def test_call_llm_no_tracking_without_state(self) -> None:
         """_track_cost is NOT called when state=None."""
+        expected = _DummyResponse(answer="ok")
+        client, _provider = _make_fake_llm_client(expected)
         agent = _create_stub_agent()
-        agent._instructor.messages.create = AsyncMock(return_value=_DummyResponse(answer="ok"))
+        agent._llm_client = client
 
-        with (
-            patch(
-                "job_hunter_agents.agents.base.extract_token_usage",
-                return_value=(10, 20),
-            ),
-            patch.object(agent, "_track_cost") as mock_track,
-        ):
+        with patch.object(agent, "_track_cost") as mock_track:
             await agent._call_llm(
                 messages=[{"role": "user", "content": "test"}],
                 model="claude-haiku-4-5-20251001",
@@ -136,18 +120,21 @@ class TestTrackCost:
         """Tokens are accumulated correctly in state."""
         agent = _create_stub_agent()
         state = make_pipeline_state()
+        usage = build_token_usage("claude-haiku-4-5-20251001", 100, 200)
 
-        agent._track_cost(state, 100, 200, "claude-haiku-4-5-20251001")
+        agent._track_cost(state, usage)
 
         assert state.total_tokens == 300
 
     def test_known_model_computes_cost(self) -> None:
-        """Haiku model computes cost from TOKEN_PRICES."""
+        """Haiku model computes cost from llm-gateway pricing registry."""
         agent = _create_stub_agent()
         state = make_pipeline_state()
 
         # haiku: input=$0.80/1M, output=$4.00/1M
-        agent._track_cost(state, 1_000_000, 1_000_000, "claude-haiku-4-5-20251001")
+        usage = build_token_usage("claude-haiku-4-5-20251001", 1_000_000, 1_000_000)
+
+        agent._track_cost(state, usage)
 
         # 1M * 0.80/1M + 1M * 4.00/1M = 4.80
         assert state.total_cost_usd == pytest.approx(4.80)
@@ -156,8 +143,9 @@ class TestTrackCost:
         """Unknown model adds tokens but not cost."""
         agent = _create_stub_agent()
         state = make_pipeline_state()
+        usage = build_token_usage("unknown-model-xyz", 500, 500)
 
-        agent._track_cost(state, 500, 500, "unknown-model-xyz")
+        agent._track_cost(state, usage)
 
         assert state.total_tokens == 1000
         assert state.total_cost_usd == 0.0
@@ -166,9 +154,10 @@ class TestTrackCost:
         """CostLimitExceededError raised when cost exceeds max."""
         agent = _create_stub_agent(max_cost_per_run_usd=0.01)
         state = make_pipeline_state()
+        usage = build_token_usage("claude-haiku-4-5-20251001", 1_000_000, 1_000_000)
 
         with pytest.raises(CostLimitExceededError):
-            agent._track_cost(state, 1_000_000, 1_000_000, "claude-haiku-4-5-20251001")
+            agent._track_cost(state, usage)
 
     def test_warn_threshold_logs(self) -> None:
         """Warning is emitted when cost exceeds warn threshold."""
@@ -177,9 +166,10 @@ class TestTrackCost:
             max_cost_per_run_usd=100.0,
         )
         state = make_pipeline_state()
+        usage = build_token_usage("claude-haiku-4-5-20251001", 100_000, 100_000)
 
         with patch("job_hunter_agents.agents.base.logger") as mock_logger:
-            agent._track_cost(state, 100_000, 100_000, "claude-haiku-4-5-20251001")
+            agent._track_cost(state, usage)
 
         mock_logger.warning.assert_called_once()
 
@@ -201,3 +191,18 @@ class TestRecordError:
         assert state.errors[0].error_type == "ValueError"
         assert state.errors[0].error_message == "boom"
         assert state.errors[0].is_fatal is False
+
+
+@pytest.mark.unit
+class TestClose:
+    """Test close() method."""
+
+    @pytest.mark.asyncio
+    async def test_close_delegates_to_client(self) -> None:
+        """close() calls _llm_client.close()."""
+        agent = _create_stub_agent()
+        agent._llm_client.close = AsyncMock()  # type: ignore[method-assign]
+
+        await agent.close()
+
+        agent._llm_client.close.assert_called_once()  # type: ignore[attr-defined]

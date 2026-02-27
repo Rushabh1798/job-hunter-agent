@@ -10,7 +10,7 @@ from job_hunter_agents.agents.base import BaseAgent
 from job_hunter_agents.prompts.prefs_parser import (
     PREFS_PARSER_USER,
 )
-from job_hunter_core.models.candidate import SearchPreferences
+from job_hunter_core.models.candidate import CandidateProfile, SearchPreferences
 from job_hunter_core.state import PipelineState
 
 logger = structlog.get_logger()
@@ -42,6 +42,10 @@ class PrefsParserAgent(BaseAgent):
 
         prefs.raw_text = state.config.preferences_text
 
+        # Enrich missing fields from resume profile if available
+        if state.profile:
+            prefs = self._enrich_preferences(prefs, state.profile)
+
         state.preferences = prefs
         self._log_end(
             time.monotonic() - start,
@@ -51,3 +55,28 @@ class PrefsParserAgent(BaseAgent):
             },
         )
         return state
+
+    @staticmethod
+    def _enrich_preferences(
+        prefs: SearchPreferences,
+        profile: CandidateProfile,
+    ) -> SearchPreferences:
+        """Fill empty preference fields from the candidate's resume profile."""
+        if not prefs.preferred_locations and profile.location:
+            prefs.preferred_locations = [profile.location]
+
+        if not prefs.target_titles:
+            titles: list[str] = []
+            if profile.current_title:
+                titles.append(profile.current_title)
+            titles.extend(profile.past_titles[:2])
+            if titles:
+                prefs.target_titles = titles
+
+        if not prefs.target_seniority and profile.seniority_level:
+            prefs.target_seniority = [profile.seniority_level]
+
+        if not prefs.preferred_industries and profile.industries:
+            prefs.preferred_industries = list(profile.industries)
+
+        return prefs

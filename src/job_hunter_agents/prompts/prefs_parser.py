@@ -12,7 +12,9 @@ from freeform natural language text.
 - Parse both explicit ("I want") and implicit ("not interested in") preferences
 - For company size, map: startup -> "startup", mid-size -> "mid", large/enterprise -> "large"
 - "Big tech" = excluded_companies pattern, not a company size
-- Always use USD for currency unless explicitly stated otherwise
+- Detect the currency from context. "LPA" or "lakhs" means INR. "k" with USD context means \
+thousands USD. Set the currency field accordingly (USD, INR, EUR, GBP, etc.). \
+Convert LPA to annual: 1 LPA = 100,000 INR. For example, "35 LPA" = min_salary 3500000 INR.
 </rules>
 """
 

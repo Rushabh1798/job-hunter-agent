@@ -15,8 +15,13 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="JH_", env_file=".env")
 
     # --- LLM ---
-    anthropic_api_key: SecretStr = Field(
-        description="Anthropic API key for Claude models",
+    llm_provider: str = Field(
+        default="anthropic",
+        description="LLM provider: 'anthropic', 'local_claude', or 'fake'",
+    )
+    anthropic_api_key: SecretStr | None = Field(
+        default=None,
+        description="Anthropic API key for Claude models (required when llm_provider=anthropic)",
     )
     haiku_model: str = Field(
         default="claude-haiku-4-5-20251001",
@@ -169,15 +174,25 @@ class Settings(BaseSettings):
     # --- Scoring ---
     min_score_threshold: int = Field(
         default=60,
-        description="Minimum score to include in output",
+        description="Minimum score (0-100) to include in output",
     )
     top_k_semantic: int = Field(
-        default=50,
-        description="Number of jobs to shortlist via semantic search",
+        default=40,
+        description="Number of jobs to shortlist via relevance pre-filter",
     )
     max_jobs_per_company: int = Field(
+        default=2,
+        description="Maximum jobs to process per company in scoring",
+    )
+
+    # --- Adaptive Pipeline ---
+    min_recommended_jobs: int = Field(
         default=10,
-        description="Maximum jobs to process per company",
+        description="Minimum number of recommended jobs to aim for",
+    )
+    max_discovery_iterations: int = Field(
+        default=5,
+        description="Maximum discovery loop iterations in adaptive pipeline",
     )
 
     # --- Run ---
@@ -246,8 +261,12 @@ class Settings(BaseSettings):
 
     # --- Agent Execution ---
     agent_timeout_seconds: int = Field(
-        default=300,
+        default=600,
         description="Per-agent execution timeout in seconds",
+    )
+    llm_timeout_seconds: int = Field(
+        default=600,
+        description="Per-LLM-call timeout in seconds (should be >= agent_timeout_seconds)",
     )
 
     # --- Cost Guardrails ---
@@ -259,6 +278,14 @@ class Settings(BaseSettings):
         default=2.0,
         description="Log warning at this cost threshold (USD)",
     )
+
+    @model_validator(mode="after")
+    def validate_llm_config(self) -> Settings:
+        """Require anthropic_api_key only when llm_provider is 'anthropic'."""
+        if self.llm_provider == "anthropic" and not self.anthropic_api_key:
+            msg = "anthropic_api_key required when llm_provider=anthropic"
+            raise ValueError(msg)
+        return self
 
     @model_validator(mode="after")
     def validate_db_config(self) -> Settings:

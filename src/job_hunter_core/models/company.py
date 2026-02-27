@@ -10,6 +10,16 @@ from uuid import UUID, uuid4
 from pydantic import BaseModel, Field, HttpUrl
 
 
+class CompanyTier(StrEnum):
+    """Company tier classification."""
+
+    TIER_1 = "tier_1"  # Big tech / FAANG-level, >10k employees
+    TIER_2 = "tier_2"  # Established mid-to-large, 1k-10k employees
+    TIER_3 = "tier_3"  # Growing companies, 200-1000 employees
+    STARTUP = "startup"  # Early-to-growth stage, <200 employees
+    UNKNOWN = "unknown"
+
+
 class ATSType(StrEnum):
     """Applicant Tracking System types."""
 
@@ -52,6 +62,9 @@ class Company(BaseModel):
         default=None, description="Organization type (startup, enterprise, etc.)"
     )
     description: str | None = Field(default=None, description="Brief company description")
+    tier: CompanyTier = Field(
+        default=CompanyTier.UNKNOWN, description="Company tier classification"
+    )
     source_confidence: float = Field(
         ge=0.0, le=1.0, default=1.0, description="Confidence in career page accuracy"
     )

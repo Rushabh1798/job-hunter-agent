@@ -37,7 +37,8 @@ class AshbyClient(BaseATSClient):
             return []
 
         api_url = ASHBY_API_URL.format(slug=slug)
-        async with httpx.AsyncClient(timeout=30.0) as client:
+        headers = {"User-Agent": "Mozilla/5.0 (compatible; JobHunter/1.0)"}
+        async with httpx.AsyncClient(timeout=30.0, headers=headers) as client:
             response = await client.get(api_url)
             response.raise_for_status()
             data = response.json()

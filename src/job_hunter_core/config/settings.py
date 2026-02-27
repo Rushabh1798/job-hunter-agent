@@ -173,16 +173,16 @@ class Settings(BaseSettings):
 
     # --- Scoring ---
     min_score_threshold: int = Field(
-        default=80,
+        default=60,
         description="Minimum score (0-100) to include in output",
     )
     top_k_semantic: int = Field(
-        default=50,
-        description="Number of jobs to shortlist via semantic search",
+        default=40,
+        description="Number of jobs to shortlist via relevance pre-filter",
     )
     max_jobs_per_company: int = Field(
-        default=10,
-        description="Maximum jobs to process per company",
+        default=2,
+        description="Maximum jobs to process per company in scoring",
     )
 
     # --- Adaptive Pipeline ---
@@ -191,7 +191,7 @@ class Settings(BaseSettings):
         description="Minimum number of recommended jobs to aim for",
     )
     max_discovery_iterations: int = Field(
-        default=3,
+        default=5,
         description="Maximum discovery loop iterations in adaptive pipeline",
     )
 
@@ -261,8 +261,12 @@ class Settings(BaseSettings):
 
     # --- Agent Execution ---
     agent_timeout_seconds: int = Field(
-        default=300,
+        default=600,
         description="Per-agent execution timeout in seconds",
+    )
+    llm_timeout_seconds: int = Field(
+        default=600,
+        description="Per-LLM-call timeout in seconds (should be >= agent_timeout_seconds)",
     )
 
     # --- Cost Guardrails ---

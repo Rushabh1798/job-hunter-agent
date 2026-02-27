@@ -54,14 +54,25 @@ class AggregatorAgent(BaseAgent):
         return state
 
     def _build_rows(self, state: PipelineState) -> list[dict[str, object]]:
-        """Build output rows from scored jobs."""
+        """Build output rows from scored jobs (best job per company)."""
         # Build company_id -> tier lookup
         tier_map: dict[str, str] = {}
         for company in state.companies:
             tier_map[str(company.id)] = company.tier.value
 
-        rows: list[dict[str, object]] = []
+        # Deduplicate: keep only the highest-scored job per company
+        # (scored_jobs are already sorted by score descending)
+        seen_companies: set[str] = set()
+        deduped = []
         for sj in state.scored_jobs:
+            co_name = sj.job.company_name
+            if co_name in seen_companies:
+                continue
+            seen_companies.add(co_name)
+            deduped.append(sj)
+
+        rows: list[dict[str, object]] = []
+        for rank, sj in enumerate(deduped, start=1):
             job = sj.job
             report = sj.fit_report
             salary = self._format_salary(job.salary_min, job.salary_max, job.currency)
@@ -69,7 +80,7 @@ class AggregatorAgent(BaseAgent):
 
             rows.append(
                 {
-                    "Rank": sj.rank,
+                    "Rank": rank,
                     "Score": report.score,
                     "Recommendation": report.recommendation,
                     "Company": job.company_name,

@@ -49,6 +49,28 @@ class ExtractedJob(BaseModel):
     department: str | None = Field(default=None)
 
 
+_REMOTE_TYPE_MAP: dict[str, str] = {
+    "onsite": "onsite",
+    "on-site": "onsite",
+    "on_site": "onsite",
+    "in-office": "onsite",
+    "in_office": "onsite",
+    "office": "onsite",
+    "hybrid": "hybrid",
+    "remote": "remote",
+    "fully remote": "remote",
+    "fully_remote": "remote",
+    "work from home": "remote",
+    "wfh": "remote",
+    "unknown": "unknown",
+}
+
+
+def _normalize_remote_type(raw: str) -> str:
+    """Normalize LLM-extracted remote_type to valid NormalizedJob enum value."""
+    return _REMOTE_TYPE_MAP.get(raw.lower().strip(), "unknown")
+
+
 class JobProcessorAgent(BaseAgent):
     """Normalize raw job data into structured NormalizedJob records."""
 
@@ -98,9 +120,9 @@ class JobProcessorAgent(BaseAgent):
             return None
 
         title = str(data.get("title", ""))
-        jd_text = str(data.get("content", data.get("description", "")))
-        if not title or not jd_text:
+        if not title:
             return None
+        jd_text = str(data.get("content", data.get("description", "")))
 
         loc_data = data.get("location")
         location = ""
@@ -121,7 +143,9 @@ class JobProcessorAgent(BaseAgent):
         )
 
         posted_date = self._extract_posted_date(data)
-        content_hash = self._compute_hash(raw_job.company_name, title, jd_text)
+        # Include apply_url in hash for API jobs (jd_text may be empty)
+        hash_input = jd_text if jd_text else apply_url
+        content_hash = self._compute_hash(raw_job.company_name, title, hash_input)
 
         return NormalizedJob(
             raw_job_id=raw_job.id,
@@ -140,10 +164,12 @@ class JobProcessorAgent(BaseAgent):
         content = raw_job.raw_html or ""
         if len(content.strip()) < 100:
             logger.warning(
-                "low_quality_content",
+                "skipping_empty_content",
                 company=raw_job.company_name,
-                content_length=len(content),
+                content_length=len(content.strip()),
+                source_url=str(raw_job.source_url),
             )
+            return None
 
         extracted = await self._call_llm(
             messages=[
@@ -180,7 +206,7 @@ class JobProcessorAgent(BaseAgent):
             jd_text=extracted.jd_text,
             apply_url=extracted.apply_url or str(raw_job.source_url),
             location=extracted.location,
-            remote_type=extracted.remote_type,
+            remote_type=_normalize_remote_type(extracted.remote_type),
             posted_date=posted_date,
             salary_min=extracted.salary_min,
             salary_max=extracted.salary_max,

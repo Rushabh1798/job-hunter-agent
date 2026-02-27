@@ -45,7 +45,7 @@ class BaseAgent(ABC):
             provider=self.settings.llm_provider,
             api_key=api_key,
             max_retries=3,
-            timeout_seconds=self.settings.agent_timeout_seconds,
+            timeout_seconds=self.settings.llm_timeout_seconds,
             cost_limit_usd=None,
             cost_warn_usd=None,
             trace_enabled=False,

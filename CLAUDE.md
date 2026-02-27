@@ -109,7 +109,9 @@ Detailed component specs live in `docs/specs/`. Load only the spec(s) you need f
 | SPEC_11 | CLI, Makefile, Docker, CI, test mocks/fixtures |
 
 ## Known Issues / TODOs
-- Phases 0-13 complete (core, infra, tools, agents, pipeline, CLI, observability, testing, Docker, open source standards, integration & E2E testing, Temporal orchestration, vendor-agnostic abstractions)
+- Phases 0-14 complete; Phase 15 (adaptive pipeline quality) in progress
+- **Active work**: Achieving GOAL.md criteria (10+ unique company jobs, location-relevant, posted dates, specific apply URLs). See `GOAL.md` and `scripts/verify_goal.py`.
+- Pipeline run configuration: `run_live_pipeline.py` (local_claude, SQLite, DuckDuckGo, adaptive mode)
 - Terraform IaC and Kubernetes manifests deferred to future
 - Web UI deferred to future
 
@@ -140,6 +142,7 @@ make test-live                 # run live tests only
 - Pre-commit hook mirrors CI: ruff check + ruff format + mypy + unit tests (90% coverage gate)
 
 ## Recent Changes
+- Phase 15 (in progress): Adaptive pipeline quality — `AdaptivePipeline` with discovery loop (find→scrape→process→score, repeat until `min_recommended_jobs` unique companies met), curated ATS seed companies (46 verified, 17 India-tagged), hard location filter with Indian city alias expansion (Bangalore↔Bengaluru, Mumbai↔Bombay, etc.), company deduplication in aggregator, incremental job accumulation in scraper, preference enrichment from resume, scoring improvements (recency dimension, company tier context, improved calibration). Settings: `top_k_semantic=40`, `max_jobs_per_company=2`, `max_discovery_iterations=5`, `min_recommended_jobs=10`. New files: `adaptive_pipeline.py`, `ats_seed_companies.py`. 409 unit tests, 90%+ coverage.
 - Phase 14: llm-gateway integration — replaced `anthropic` + `instructor` direct usage with `llm-gateway[anthropic]` package. `BaseAgent` now uses `LLMClient` with `_build_llm_client()` seam (single patch target). Removed `extract_token_usage()`, `TOKEN_PRICES`, `FakeInstructorClient`, `_raw_response` hacks. Cost tracking uses `TokenUsage` from llm-gateway. `make_settings()` uses `llm_provider="fake"` (no patches needed for agent construction). Dry-run patches reduced from 2 targets to 1. 54 `AsyncAnthropic`/`instructor` patches removed from 9 test files. `local_claude` live tests (free, no API key). 331 unit tests, 90%+ coverage.
 - Phase 13: Vendor-agnostic tool abstractions + test infrastructure hardening — `SearchProvider` and `PageScraper` Protocol interfaces, DuckDuckGo search implementation (free, no API key), tool factory functions (`create_search_provider`, `create_page_scraper`), agents refactored to use factories, `activate_integration_patches()` for LLM-only mocking, `make_real_settings()` for real Postgres/Redis in tests, real scraping integration tests (`test_pipeline_real_scraping.py`), CI pipeline hardening (wait step, container health checks, env vars, artifact upload), run report generation from OTEL spans (`run_report.py`), `pipeline_tracing` fixture for auto-generating run reports in tests, spec files updated
 - Phase 12c: Production hardening — Pydantic v2 data converter for Temporal serialization, `result_type` on `execute_activity()` calls, `asyncio.gather(return_exceptions=True)` for resilient parallel scraping, `run_result` checkpoint serialization for output file persistence, embedded worker mode with `AsyncExitStack` + queue deduplication, Docker healthcheck fix for container networking, 90% coverage gate (pre-commit + CI + pyproject.toml), 11 new edge-case unit tests (328 total, 90%+ coverage)

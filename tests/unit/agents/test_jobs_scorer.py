@@ -273,6 +273,128 @@ class TestJobsScorerAgent:
 
 
 @pytest.mark.unit
+class TestRelevancePrefilter:
+    """Test _relevance_prefilter method."""
+
+    def test_excludes_non_engineering_titles(self) -> None:
+        """Non-engineering roles like Account Executive are filtered out."""
+        settings = make_settings()
+        agent = JobsScorerAgent(settings)
+        profile = CandidateProfile(
+            name="Jane",
+            email="jane@test.com",
+            years_of_experience=5.0,
+            skills=[Skill(name="Python")],
+            raw_text="test",
+            content_hash="abc",
+        )
+        prefs = SearchPreferences(raw_text="test")
+        jobs = [
+            _make_normalized_job("Account Executive"),
+            _make_normalized_job("Senior Software Engineer"),
+            _make_normalized_job("Sales Representative"),
+            _make_normalized_job("Machine Learning Engineer"),
+        ]
+        result = agent._relevance_prefilter(jobs, profile, prefs)
+        titles = [j.title for j in result]
+
+        assert "Account Executive" not in titles
+        assert "Sales Representative" not in titles
+        assert "Senior Software Engineer" in titles
+        assert "Machine Learning Engineer" in titles
+
+    def test_ranks_by_keyword_relevance(self) -> None:
+        """Jobs with matching title keywords rank higher."""
+        settings = make_settings()
+        agent = JobsScorerAgent(settings)
+        profile = CandidateProfile(
+            name="Jane",
+            email="jane@test.com",
+            years_of_experience=5.0,
+            skills=[Skill(name="Python"), Skill(name="Machine Learning")],
+            current_title="ML Engineer",
+            raw_text="test",
+            content_hash="abc",
+        )
+        prefs = SearchPreferences(raw_text="test")
+        jobs = [
+            _make_normalized_job("Frontend Designer"),
+            _make_normalized_job("ML Engineer"),
+        ]
+        result = agent._relevance_prefilter(jobs, profile, prefs)
+
+        assert result[0].title == "ML Engineer"
+
+    def test_respects_per_company_limit(self) -> None:
+        """Pre-filter limits jobs per company."""
+        settings = make_settings(max_jobs_per_company=2)
+        agent = JobsScorerAgent(settings)
+        company_id = uuid4()
+        jobs = []
+        for i in range(5):
+            job = _make_normalized_job(f"Engineer {i}")
+            job.company_id = company_id
+            job.company_name = "SameCo"
+            jobs.append(job)
+        result = agent._relevance_prefilter(jobs, None, None)
+
+        assert len(result) == 2
+
+    def test_respects_top_k_cap(self) -> None:
+        """Pre-filter caps total jobs at top_k_semantic."""
+        settings = make_settings(top_k_semantic=3)
+        agent = JobsScorerAgent(settings)
+        jobs = [_make_normalized_job(f"Role {i}") for i in range(10)]
+        # Give each a different company to avoid per-company limit
+        for i, job in enumerate(jobs):
+            job.company_name = f"Co{i}"
+        result = agent._relevance_prefilter(jobs, None, None)
+
+        assert len(result) == 3
+
+    def test_excludes_non_matching_locations(self) -> None:
+        """Jobs in non-matching locations are hard-excluded."""
+        settings = make_settings()
+        agent = JobsScorerAgent(settings)
+        profile = CandidateProfile(
+            name="Jane",
+            email="jane@test.com",
+            years_of_experience=5.0,
+            skills=[Skill(name="Python")],
+            raw_text="test",
+            content_hash="abc",
+        )
+        prefs = SearchPreferences(
+            raw_text="test",
+            preferred_locations=["india", "bangalore"],
+        )
+        india_job = _make_normalized_job("ML Engineer")
+        india_job.location = "Bangalore, India"
+        india_job.company_name = "Co1"
+        sf_job = _make_normalized_job("ML Engineer")
+        sf_job.location = "San Francisco, CA, United States"
+        sf_job.company_name = "Co2"
+        remote_job = _make_normalized_job("ML Engineer")
+        remote_job.location = "New York, USA"
+        remote_job.remote_type = "remote"
+        remote_job.company_name = "Co3"
+        no_loc_job = _make_normalized_job("ML Engineer")
+        no_loc_job.location = ""
+        no_loc_job.company_name = "Co4"
+
+        jobs = [india_job, sf_job, remote_job, no_loc_job]
+        result = agent._relevance_prefilter(jobs, profile, prefs)
+        locations = [j.location for j in result]
+
+        assert "Bangalore, India" in locations
+        assert "San Francisco, CA, United States" not in locations
+        # Remote jobs kept despite non-matching location
+        assert "New York, USA" in locations
+        # Empty location excluded when prefs set (unknown location = not matching)
+        assert "" not in locations
+
+
+@pytest.mark.unit
 class TestCurrencySymbol:
     """Test _currency_symbol helper."""
 

@@ -10,21 +10,52 @@ from job_hunter_core.interfaces.search import SearchResult
 
 logger = structlog.get_logger()
 
-# Job aggregator sites to deprioritize — these rarely lead to direct apply URLs
+# Job aggregator and blog sites to deprioritize — rarely lead to direct apply URLs
 _AGGREGATOR_DOMAINS = frozenset(
     {
+        # Global aggregators
         "indeed.com",
         "glassdoor.com",
         "linkedin.com",
-        "naukri.com",
-        "internshala.com",
         "monster.com",
         "ziprecruiter.com",
         "angel.co",
         "wellfound.com",
         "simplyhired.com",
+        # India-specific aggregators
+        "naukri.com",
+        "internshala.com",
         "shine.com",
         "foundit.in",
+        "apna.co",
+        "instahyre.com",
+        "hirist.com",
+        "cutshort.io",
+        "weekday.works",
+        "hirect.in",
+        # Blog / news / content sites (not career pages)
+        "alexahire.in",
+        "placementstore.com",
+        "geeksgod.com",
+        "tblogqus.com",
+        "interviewchacha.com",
+        "globalconsultantsreview.com",
+        "unstop.com",
+        "startup.jobs",
+        "ambitionbox.com",
+        "payscale.com",
+        "comparably.com",
+        "levels.fyi",
+        "teamblind.com",
+        "reddit.com",
+        "quora.com",
+        "medium.com",
+        "wikipedia.org",
+        "youtube.com",
+        "fishbowlapp.com",
+        "analyticsindiamag.com",
+        "techgig.com",
+        "geeksforgeeks.org",
     }
 )
 
@@ -40,6 +71,50 @@ _ATS_DOMAINS = frozenset(
         "icims.com",
     }
 )
+
+
+_NON_CAREER_URL_PATTERNS = frozenset(
+    {
+        # Path-based patterns
+        "/blog/",
+        "/blog?",
+        "/stories/",
+        "/story/",
+        "/news/",
+        "/press/",
+        "/article/",
+        "/about-us/",
+        "/helpdesk",
+        "/ithelpdesk",
+        "/support/",
+        "/docs/",
+        "/documentation/",
+        "/research/",
+        "/product/",
+        "/pricing",
+        "/features/",
+        "/login",
+        "/signup",
+        # Subdomain-based patterns (blog.company.com, stories.company.com)
+        "://blog.",
+        "://stories.",
+        "://story.",
+        "://news.",
+        "://press.",
+        "://docs.",
+        "://support.",
+        "://help.",
+        "://ithelpdesk.",
+        "://mumvpn.",
+        "://vpn.",
+    }
+)
+
+
+def _is_non_career_url(url: str) -> bool:
+    """Check if a URL is a non-career page (blog, docs, helpdesk, etc.)."""
+    url_lower = url.lower()
+    return any(pattern in url_lower for pattern in _NON_CAREER_URL_PATTERNS)
 
 
 def _is_aggregator(url: str) -> bool:
@@ -95,12 +170,23 @@ class DuckDuckGoSearchTool:
         """Search for a company's official career page URL.
 
         Uses multi-strategy search with aggregator filtering and
-        ATS/company-domain preference scoring.
+        ATS/company-domain preference scoring. Prioritizes official
+        company domains over third-party sites.
         """
+        # Strip common suffixes for cleaner search
+        clean_name = company_name.strip()
+        for suffix in (" India", " Labs", " R&D", " Research", " AI", " Global Tech"):
+            if clean_name.endswith(suffix):
+                base_name = clean_name[: -len(suffix)].strip()
+                break
+        else:
+            base_name = clean_name
+
         queries = [
-            f'"{company_name}" careers hiring apply',
-            f'"{company_name}" jobs greenhouse OR lever OR ashby OR workday',
-            f"{company_name} careers jobs official site",
+            f"{base_name} careers jobs site:{base_name.lower().replace(' ', '')}.com",
+            f'"{clean_name}" careers hiring apply',
+            f'"{clean_name}" jobs greenhouse OR lever OR ashby OR workday',
+            f"{clean_name} careers jobs official site",
         ]
 
         all_results: list[SearchResult] = []
@@ -144,17 +230,21 @@ class DuckDuckGoSearchTool:
             score = 0.0
             url_lower = url.lower()
 
+            # Company domain match — strongest signal (official site)
+            if _matches_company_domain(url, company_name):
+                score += 5.0
+
+            # ATS URL — high confidence (direct job listings)
+            if _is_ats_url(url):
+                score += 4.0
+
             # Career/job keyword in URL
             if any(kw in url_lower for kw in ("career", "jobs", "hiring", "work", "openings")):
                 score += 3.0
 
-            # ATS URL — high confidence
-            if _is_ats_url(url):
-                score += 4.0
-
-            # Company domain match
-            if _matches_company_domain(url, company_name):
-                score += 2.0
+            # Penalize non-career pages (blog, stories, helpdesk, etc.)
+            if _is_non_career_url(url):
+                score -= 6.0
 
             scored.append((score, url))
 

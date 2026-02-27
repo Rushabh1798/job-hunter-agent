@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import time
 
 import structlog
@@ -11,12 +12,25 @@ from job_hunter_agents.agents.base import BaseAgent
 from job_hunter_agents.prompts.job_scorer import (
     JOB_SCORER_USER,
 )
+from job_hunter_core.models.candidate import CandidateProfile, SearchPreferences
 from job_hunter_core.models.job import FitReport, NormalizedJob, ScoredJob
 from job_hunter_core.state import PipelineState
 
 logger = structlog.get_logger()
 
 BATCH_SIZE = 5
+
+# Regex to exclude clearly non-engineering roles (case-insensitive)
+_EXCLUDED_TITLE_RE = re.compile(
+    r"\baccount\s*(executive|manager)\b|\bsales\b|\brecruiter\b"
+    r"|\baccountant\b|\baccounts?\s*(payable|receivable)\b"
+    r"|\b(human\s*resources?|hr\s*(manager|generalist))\b"
+    r"|\bmarketing\s*(manager|specialist|coordinator)\b"
+    r"|\b(content\s*writer|copywriter|paralegal)\b"
+    r"|\b(office\s*manager|administrative\s*assistant|receptionist)\b"
+    r"|\bcustomer\s*(success|support)\b",
+    re.IGNORECASE,
+)
 
 _CURRENCY_SYMBOLS: dict[str, str] = {
     "USD": "$",
@@ -69,7 +83,21 @@ class JobsScorerAgent(BaseAgent):
             logger.warning("scorer_missing_profile_or_prefs")
             return state
 
-        jobs = state.normalized_jobs
+        # Pre-filter: relevance-rank, limit per company, cap total
+        all_jobs = state.normalized_jobs
+        jobs = self._relevance_prefilter(
+            all_jobs,
+            state.profile,
+            state.preferences,
+        )
+
+        if len(jobs) < len(all_jobs):
+            logger.info(
+                "scorer_pre_filtered",
+                original=len(all_jobs),
+                filtered=len(jobs),
+            )
+
         scored: list[ScoredJob] = []
 
         # Process in batches
@@ -163,6 +191,100 @@ class JobsScorerAgent(BaseAgent):
                 scored_jobs.append(ScoredJob(job=jobs[idx], fit_report=fit_report))
 
         return scored_jobs
+
+    def _relevance_prefilter(
+        self,
+        jobs: list[NormalizedJob],
+        profile: CandidateProfile | None,
+        prefs: SearchPreferences | None,
+    ) -> list[NormalizedJob]:
+        """Rank jobs by title/skill relevance, exclude non-engineering roles."""
+        # Build keyword set from profile and preferences
+        keywords: set[str] = set()
+        if profile:
+            keywords.update(w.lower() for s in profile.skills for w in s.name.split() if len(w) > 2)
+            if profile.current_title:
+                keywords.update(w.lower() for w in profile.current_title.split() if len(w) > 2)
+        if prefs:
+            for title in prefs.target_titles:
+                keywords.update(w.lower() for w in title.split() if len(w) > 2)
+
+        # Build location keywords for matching (with common aliases)
+        pref_locations: list[str] = []
+        if prefs:
+            pref_locations = [loc.lower() for loc in prefs.preferred_locations]
+            # Expand Indian city aliases so "Bangalore" also matches "Bengaluru"
+            india_aliases: dict[str, list[str]] = {
+                "bangalore": ["bengaluru", "india"],
+                "bengaluru": ["bangalore", "india"],
+                "mumbai": ["bombay", "india"],
+                "pune": ["india"],
+                "hyderabad": ["india"],
+                "chennai": ["madras", "india"],
+                "noida": ["delhi", "ncr", "india"],
+                "gurgaon": ["gurugram", "india"],
+                "gurugram": ["gurgaon", "india"],
+                "ahmedabad": ["india"],
+            }
+            expanded: set[str] = set(pref_locations)
+            for loc in list(pref_locations):
+                for alias_key, aliases in india_aliases.items():
+                    if alias_key in loc:
+                        expanded.update(aliases)
+            pref_locations = list(expanded)
+
+        # Score and filter
+        scored: list[tuple[float, NormalizedJob]] = []
+        for job in jobs:
+            title_lower = job.title.lower()
+
+            # Skip clearly non-engineering roles
+            if _EXCLUDED_TITLE_RE.search(title_lower):
+                continue
+
+            # Hard location filter: exclude jobs in non-matching locations
+            # Also exclude empty-location non-remote jobs when prefs are set
+            job_loc = (job.location or "").lower()
+            if pref_locations:
+                if not job_loc and job.remote_type != "remote":
+                    continue
+                if job_loc:
+                    loc_ok = any(pl in job_loc for pl in pref_locations)
+                    if not loc_ok and job.remote_type != "remote":
+                        continue
+
+            # Relevance score: title keyword overlap + skill overlap
+            title_words = set(title_lower.split())
+            score = len(title_words & keywords) * 2.0
+            job_skills = {s.lower() for s in job.required_skills}
+            score += len(job_skills & keywords) * 1.0
+
+            # Location bonus: strongly prefer matching locations
+            for pref_loc in pref_locations:
+                if pref_loc in job_loc:
+                    score += 10.0
+                    break
+            if job.remote_type == "remote":
+                score += 5.0
+
+            scored.append((score, job))
+
+        # Sort by relevance, then take top N per company
+        scored.sort(key=lambda x: x[0], reverse=True)
+
+        per_company: dict[str, int] = {}
+        result: list[NormalizedJob] = []
+        for _score, job in scored:
+            company = job.company_name or "unknown"
+            count = per_company.get(company, 0)
+            if count >= self.settings.max_jobs_per_company:
+                continue
+            per_company[company] = count + 1
+            result.append(job)
+            if len(result) >= self.settings.top_k_semantic:
+                break
+
+        return result
 
     def _format_jobs_block(
         self,

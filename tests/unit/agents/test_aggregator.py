@@ -191,3 +191,34 @@ class TestAggregatorAgent:
         assert AggregatorAgent._format_salary(100000, 150000, "USD") == "$100,000-$150,000 USD"
         assert AggregatorAgent._format_salary(100000, None, "EUR") == "€100,000+ EUR"
         assert AggregatorAgent._format_salary(None, None, None) == ""
+
+    def test_build_rows_deduplicates_companies(self) -> None:
+        """Only the best-scored job per company appears in output."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            settings = make_settings(output_dir=Path(tmpdir))
+            state = PipelineState(
+                config=RunConfig(
+                    resume_path=Path("/tmp/test.pdf"),
+                    preferences_text="test",
+                )
+            )
+            # Two jobs from same company, different scores
+            job1 = _make_scored_job(rank=1, score=90)
+            job1.job.company_name = "Acme"
+            job2 = _make_scored_job(rank=2, score=70)
+            job2.job.company_name = "Acme"
+            job3 = _make_scored_job(rank=3, score=65)
+            job3.job.company_name = "BetaCo"
+            state.scored_jobs = [job1, job2, job3]
+
+            agent = AggregatorAgent(settings)
+            rows = agent._build_rows(state)
+
+            assert len(rows) == 2
+            companies = [r["Company"] for r in rows]
+            assert companies == ["Acme", "BetaCo"]
+            # Best score from Acme is 90
+            assert rows[0]["Score"] == 90
+            # Ranks are reassigned sequentially
+            assert rows[0]["Rank"] == 1
+            assert rows[1]["Rank"] == 2

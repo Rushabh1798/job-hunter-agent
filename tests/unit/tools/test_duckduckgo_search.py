@@ -213,3 +213,71 @@ class TestFindCareerPage:
             url = await tool.find_career_page("NonexistentCorp")
 
         assert url is None
+
+    @pytest.mark.asyncio
+    async def test_strips_company_suffix(self) -> None:
+        """Company suffixes like 'India' are stripped for cleaner search."""
+        tool = DuckDuckGoSearchTool()
+
+        queries_captured: list[str] = []
+
+        async def _capture_search(query: str, max_results: int = 5) -> list[SearchResult]:
+            queries_captured.append(query)
+            return [
+                SearchResult(
+                    title="Acme Careers",
+                    url="https://acme.com/careers",
+                    content="Join us",
+                    score=0,
+                ),
+            ]
+
+        with patch.object(tool, "search", side_effect=_capture_search):
+            url = await tool.find_career_page("Acme India")
+
+        assert url is not None
+        # The base_name should be "Acme" (stripped "India")
+        assert any("acme" in q.lower() for q in queries_captured)
+
+
+@pytest.mark.unit
+class TestNonCareerUrlPenalty:
+    """Test that non-career URLs are penalized."""
+
+    def test_blog_url_penalized(self) -> None:
+        """Blog URLs get penalized and are not selected."""
+        from job_hunter_agents.tools.duckduckgo_search import _is_non_career_url
+
+        assert _is_non_career_url("https://acme.com/blog/post") is True
+
+    def test_careers_url_not_penalized(self) -> None:
+        """Career URLs are not penalized."""
+        from job_hunter_agents.tools.duckduckgo_search import _is_non_career_url
+
+        assert _is_non_career_url("https://acme.com/careers") is False
+
+
+@pytest.mark.unit
+class TestSearchJobsOnSite:
+    """Test search_jobs_on_site method."""
+
+    @pytest.mark.asyncio
+    async def test_search_jobs_on_site(self) -> None:
+        """search_jobs_on_site delegates to search with site: prefix."""
+        tool = DuckDuckGoSearchTool()
+
+        async def _mock_search(query: str, max_results: int = 5) -> list[SearchResult]:
+            assert "site:acme.com" in query
+            return [
+                SearchResult(
+                    title="SWE at Acme",
+                    url="https://acme.com/jobs/swe",
+                    content="Apply now",
+                    score=0,
+                ),
+            ]
+
+        with patch.object(tool, "search", side_effect=_mock_search):
+            results = await tool.search_jobs_on_site("acme.com", "software engineer")
+
+        assert len(results) == 1

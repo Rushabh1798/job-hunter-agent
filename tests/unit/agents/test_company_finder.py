@@ -128,3 +128,50 @@ class TestCompanyFinderAgent:
         """Invalid tier strings fall back to UNKNOWN."""
         assert CompanyFinderAgent._map_tier("mega_corp") == CompanyTier.UNKNOWN
         assert CompanyFinderAgent._map_tier("") == CompanyTier.UNKNOWN
+
+
+@pytest.mark.unit
+class TestGetSeedCompanies:
+    """Test ATS seed company selection."""
+
+    def test_returns_companies_matching_industries(self) -> None:
+        """Seed companies are filtered and scored by industry tags."""
+        from job_hunter_agents.data.ats_seed_companies import match_seed_companies
+
+        results = match_seed_companies(
+            industries=["Technology", "AI"],
+            locations=["Bangalore"],
+            excluded_names=set(),
+            limit=5,
+        )
+        assert len(results) > 0
+        assert len(results) <= 5
+        # All results should have valid ATS types
+        for company in results:
+            assert company.ats in ("greenhouse", "lever", "ashby")
+
+    def test_respects_excluded_names(self) -> None:
+        """Excluded companies are not returned."""
+        from job_hunter_agents.data.ats_seed_companies import match_seed_companies
+
+        results = match_seed_companies(
+            industries=["Technology"],
+            locations=["Bangalore"],
+            excluded_names={"Postman", "Zscaler"},
+            limit=20,
+        )
+        names = {c.name for c in results}
+        assert "Postman" not in names
+        assert "Zscaler" not in names
+
+    def test_limit_respected(self) -> None:
+        """Returns at most `limit` companies."""
+        from job_hunter_agents.data.ats_seed_companies import match_seed_companies
+
+        results = match_seed_companies(
+            industries=["Technology"],
+            locations=["Remote"],
+            excluded_names=set(),
+            limit=3,
+        )
+        assert len(results) <= 3

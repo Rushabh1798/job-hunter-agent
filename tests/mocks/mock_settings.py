@@ -28,7 +28,8 @@ def make_settings(**overrides: object) -> MagicMock:
     settings.warn_cost_threshold_usd = 2.0
     settings.checkpoint_enabled = False
     settings.checkpoint_dir = Path("/tmp/checkpoints")
-    settings.agent_timeout_seconds = 300
+    settings.agent_timeout_seconds = 600
+    settings.llm_timeout_seconds = 600
     settings.log_level = "INFO"
     settings.log_format = "console"
     settings.db_backend = "sqlite"
@@ -41,8 +42,8 @@ def make_settings(**overrides: object) -> MagicMock:
     settings.min_recommended_jobs = 10
     settings.max_discovery_iterations = 3
     settings.max_concurrent_scrapers = 5
-    settings.max_jobs_per_company = 10
-    settings.top_k_semantic = 50
+    settings.max_jobs_per_company = 2
+    settings.top_k_semantic = 40
     settings.output_dir = Path("/tmp/output")
     settings.email_provider = "smtp"
     settings.smtp_host = "smtp.test.com"

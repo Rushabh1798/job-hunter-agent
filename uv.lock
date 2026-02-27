@@ -1600,7 +1600,7 @@ requires-dist = [
     { name = "jinja2", specifier = ">=3.1" },
     { name = "langgraph", specifier = ">=0.2" },
     { name = "langsmith", specifier = ">=0.1" },
-    { name = "llm-gateway", extras = ["anthropic"], git = "https://github.com/Rushabh1798/llm-gateway.git?rev=ae08a91" },
+    { name = "llm-gateway", extras = ["anthropic"], git = "https://github.com/Rushabh1798/llm-gateway.git?rev=619bbc0" },
     { name = "numpy", specifier = ">=1.26" },
     { name = "openpyxl", specifier = ">=3.1" },
     { name = "opentelemetry-api", specifier = ">=1.20" },
@@ -1912,8 +1912,8 @@ wheels = [
 
 [[package]]
 name = "llm-gateway"
-version = "0.1.dev11+gae08a91b8"
-source = { git = "https://github.com/Rushabh1798/llm-gateway.git?rev=ae08a91#ae08a91b8dec7b5cec93cef7f18a847c9c3a1fed" }
+version = "0.1.dev12+g619bbc0a3"
+source = { git = "https://github.com/Rushabh1798/llm-gateway.git?rev=619bbc0#619bbc0a3be67669505cdf3e5234a4d55ca0304c" }
 dependencies = [
     { name = "pydantic" },
     { name = "pydantic-settings" },

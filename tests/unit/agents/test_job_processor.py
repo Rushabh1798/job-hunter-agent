@@ -9,7 +9,11 @@ from uuid import uuid4
 
 import pytest
 
-from job_hunter_agents.agents.job_processor import ExtractedJob, JobProcessorAgent
+from job_hunter_agents.agents.job_processor import (
+    ExtractedJob,
+    JobProcessorAgent,
+    _normalize_remote_type,
+)
 from job_hunter_core.models.job import RawJob
 from job_hunter_core.models.run import RunConfig
 from job_hunter_core.state import PipelineState
@@ -321,3 +325,45 @@ class TestJobProcessorAgent:
 
         assert len(result.normalized_jobs) == 1
         assert "acme.com/careers" in str(result.normalized_jobs[0].apply_url)
+
+    def test_normalize_remote_type_variants(self) -> None:
+        """_normalize_remote_type maps common variants to valid enum values."""
+        assert _normalize_remote_type("on-site") == "onsite"
+        assert _normalize_remote_type("On-Site") == "onsite"
+        assert _normalize_remote_type("on_site") == "onsite"
+        assert _normalize_remote_type("in-office") == "onsite"
+        assert _normalize_remote_type("hybrid") == "hybrid"
+        assert _normalize_remote_type("remote") == "remote"
+        assert _normalize_remote_type("fully remote") == "remote"
+        assert _normalize_remote_type("wfh") == "remote"
+        assert _normalize_remote_type("unknown") == "unknown"
+        assert _normalize_remote_type("garbage") == "unknown"
+        assert _normalize_remote_type("  Remote  ") == "remote"
+
+    @pytest.mark.asyncio
+    async def test_html_normalizes_remote_type(self) -> None:
+        """HTML processing normalizes LLM remote_type to valid enum value."""
+        settings = make_settings()
+        state = PipelineState(
+            config=RunConfig(resume_path=Path("/tmp/test.pdf"), preferences_text="test")
+        )
+        state.raw_jobs = [_make_raw_job_html()]
+
+        fake_extracted = ExtractedJob(
+            title="Remote Dev",
+            jd_text="Looking for a remote dev...",
+            is_valid_posting=True,
+            remote_type="on-site",  # LLM returns hyphenated form
+        )
+
+        with patch.object(
+            JobProcessorAgent,
+            "_call_llm",
+            new_callable=AsyncMock,
+            return_value=fake_extracted,
+        ):
+            agent = JobProcessorAgent(settings)
+            result = await agent.run(state)
+
+        assert len(result.normalized_jobs) == 1
+        assert result.normalized_jobs[0].remote_type == "onsite"

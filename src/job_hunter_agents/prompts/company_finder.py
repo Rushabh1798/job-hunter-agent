@@ -1,4 +1,4 @@
-"""Company finder prompt template (v1)."""
+"""Company finder prompt template (v2)."""
 
 from __future__ import annotations
 
@@ -10,22 +10,43 @@ search preferences, generate a list of real companies that would be good targets
 - Only suggest REAL companies that currently exist and are actively hiring
 - Match company suggestions to the candidate's industry experience and preferences
 - Consider company size, location, and org type preferences
-- Include a mix of well-known and lesser-known companies
 - Provide the company's primary domain (e.g., stripe.com, not www.stripe.com)
 - Do NOT suggest companies the candidate listed in excluded_companies
 - If preferred_companies are specified, prioritize those
 - When preferred locations include cities in India (Bangalore, Mumbai, Delhi, Hyderabad, \
 Pune, Chennai, etc.), prioritize companies with strong India engineering offices
-- Prefer companies that use standard ATS systems (Greenhouse, Lever, Ashby, Workday) \
-as these have more accessible job listings
-- Include direct career page domains when known (e.g., careers.google.com)
-- Classify each company into a tier:
-  - tier_1: Large tech companies (FAANG, top-50 by revenue), >10k employees
-  - tier_2: Established mid-to-large companies, 1k-10k employees, well-known brands
-  - tier_3: Growing companies, 200-1000 employees, strong funding
-  - startup: Early-to-growth stage, <200 employees
-- Aim for a balanced mix: ~30% tier_1, ~25% tier_2, ~25% tier_3, ~20% startup
 </rules>
+
+<critical_ats_requirement>
+At least 70% of your suggestions MUST be companies that use Greenhouse, Lever, or Ashby \
+as their applicant tracking system (ATS). These platforms have public APIs that enable \
+reliable job data extraction. Companies with custom career portals (e.g., Google, Amazon, \
+Microsoft, Apple) are MUCH harder to scrape and should be limited to at most 30% of results.
+
+For ATS companies, provide the career_url in the exact ATS board format:
+- Greenhouse: https://boards.greenhouse.io/{company_slug}
+- Lever: https://jobs.lever.co/{company_slug}
+- Ashby: https://jobs.ashbyhq.com/{company_slug}
+
+Examples of companies known to use these ATS platforms:
+- Greenhouse: Stripe, Figma, Coinbase, Postman, NVIDIA, Notion, InMobi, PhonePe, Groww, \
+Druva, Turing, DoorDash, Datadog, Cloudflare, MongoDB, Vercel, HashiCorp, GitLab, \
+Samsara, Plaid, Databricks, Discord, Scale AI, Ramp, Brex, Gusto, Affirm, HubSpot
+- Lever: Cred, Meesho, Dream11 (slug: dreamsports), Paytm, Netflix, Checkr, Lucid, \
+Anduril, Navan (slug: tripactions), Deel, Miro, Coursera, Faire
+- Ashby: Notion, Ramp, Linear, Anthropic, Eleven Labs, Replit, Watershed
+
+When suggesting a company, set career_url to the ATS board URL if you know or believe \
+they use one of these systems. If unsure, set career_url to their careers page.
+</critical_ats_requirement>
+
+<tier_classification>
+- tier_1: Large tech companies (FAANG, top-50 by revenue), >10k employees
+- tier_2: Established mid-to-large companies, 1k-10k employees, well-known brands
+- tier_3: Growing companies, 200-1000 employees, strong funding
+- startup: Early-to-growth stage, <200 employees
+- Aim for a balanced mix: ~20% tier_1, ~30% tier_2, ~30% tier_3, ~20% startup
+</tier_classification>
 """
 
 COMPANY_FINDER_USER = """\
@@ -54,6 +75,8 @@ Salary Currency: {salary_currency}
 Generate 20-30 target companies. For each, provide:
 - name: Company name
 - domain: Primary website domain
+- career_url: ATS board URL or direct career page URL (if known). \
+Prefer Greenhouse/Lever/Ashby board URLs.
 - industry: Company's primary industry
 - size: Company size category (startup/mid/large/enterprise)
 - tier: Company tier (tier_1, tier_2, tier_3, startup)

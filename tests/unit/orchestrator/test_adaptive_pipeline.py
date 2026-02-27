@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from pathlib import Path
+from typing import Any
 from unittest.mock import patch
 from uuid import uuid4
 
@@ -72,12 +75,12 @@ class TestAdaptivePipelineDiscoveryLoop:
 
     @pytest.mark.asyncio
     async def test_single_iteration_meets_target(self) -> None:
-        """Loop exits after one iteration when target is met."""
+        """Loop exits after one iteration when enough unique companies found."""
         settings = make_settings(min_recommended_jobs=2, max_discovery_iterations=3)
         pipeline = AdaptivePipeline(settings)
         state = _make_ready_state()
 
-        # Simulate discovery steps producing 3 scored jobs
+        # Produce 2 unique companies in first iteration → meets target
         async def fake_step(
             step_name: str, agent_cls: type, state: PipelineState, start: float
         ) -> PipelineState:
@@ -90,13 +93,20 @@ class TestAdaptivePipelineDiscoveryLoop:
                             url="https://acme.com/careers", ats_type=ATSType.UNKNOWN
                         ),
                         tier=CompanyTier.TIER_2,
-                    )
+                    ),
+                    Company(
+                        name="BetaCo",
+                        domain="betaco.com",
+                        career_page=CareerPage(
+                            url="https://betaco.com/careers", ats_type=ATSType.UNKNOWN
+                        ),
+                        tier=CompanyTier.TIER_3,
+                    ),
                 ]
             elif step_name == "score_jobs":
                 state.scored_jobs = [
                     _make_scored_job("Acme", 90),
-                    _make_scored_job("Acme", 85),
-                    _make_scored_job("Acme", 80),
+                    _make_scored_job("BetaCo", 85),
                 ]
             return state
 
@@ -106,11 +116,12 @@ class TestAdaptivePipelineDiscoveryLoop:
         assert len(result.scored_jobs) >= 2
         assert result.discovery_iteration == 0
         assert "Acme" in result.attempted_company_names
+        assert "BetaCo" in result.attempted_company_names
 
     @pytest.mark.asyncio
     async def test_multiple_iterations_accumulate(self) -> None:
-        """Loop runs multiple iterations, accumulating scored jobs."""
-        settings = make_settings(min_recommended_jobs=4, max_discovery_iterations=3)
+        """Loop runs multiple iterations, accumulating unique companies."""
+        settings = make_settings(min_recommended_jobs=3, max_discovery_iterations=3)
         pipeline = AdaptivePipeline(settings)
         state = _make_ready_state()
 
@@ -134,23 +145,23 @@ class TestAdaptivePipelineDiscoveryLoop:
                     )
                 ]
             elif step_name == "score_jobs":
+                # 1 unique company per iteration
                 state.scored_jobs = [
                     _make_scored_job(f"Co{call_count}", 85),
-                    _make_scored_job(f"Co{call_count}", 80),
                 ]
             return state
 
         with patch.object(pipeline, "_run_agent_step", side_effect=fake_step):
             result = await pipeline._discovery_loop(state, 0.0)
 
-        # Should have accumulated jobs from 2 iterations (2+2 = 4 >= target 4)
-        assert len(result.scored_jobs) >= 4
-        assert result.attempted_company_names == {"Co1", "Co2"}
+        # 3 iterations needed: 1 unique company per iteration, target=3
+        assert len(result.scored_jobs) >= 3
+        assert result.attempted_company_names == {"Co1", "Co2", "Co3"}
 
     @pytest.mark.asyncio
     async def test_fatal_error_preserves_previous_jobs(self) -> None:
-        """Fatal error during discovery preserves previously scored jobs."""
-        settings = make_settings(min_recommended_jobs=10, max_discovery_iterations=3)
+        """Fatal error in find_companies preserves previously scored jobs."""
+        settings = make_settings(min_recommended_jobs=10, max_discovery_iterations=2)
         pipeline = AdaptivePipeline(settings)
         state = _make_ready_state()
 
@@ -163,7 +174,7 @@ class TestAdaptivePipelineDiscoveryLoop:
             if step_name == "find_companies":
                 iteration += 1
                 if iteration == 2:
-                    # Fatal on second iteration
+                    # Fatal on second (last) iteration
                     return state.build_result(status="failed", duration_seconds=1.0)
                 state.companies = [
                     Company(
@@ -285,3 +296,136 @@ class TestCompanyExclusion:
         assert "Amazon" in prompt
         assert "Google" in prompt
         assert "Meta" in prompt
+
+
+@pytest.mark.unit
+class TestAdaptivePipelineRun:
+    """Test the full run() method of AdaptivePipeline."""
+
+    @pytest.mark.asyncio
+    async def test_run_completes_and_returns_result(self) -> None:
+        """Run completes setup + discovery + output and returns a valid RunResult."""
+        settings = make_settings(min_recommended_jobs=1, max_discovery_iterations=1)
+        pipeline = AdaptivePipeline(settings)
+
+        async def fake_step(
+            step_name: str, agent_cls: type, state: PipelineState, start: float
+        ) -> PipelineState:
+            if step_name == "find_companies":
+                state.companies = [
+                    Company(
+                        name="Acme",
+                        domain="acme.com",
+                        career_page=CareerPage(
+                            url="https://acme.com/careers", ats_type=ATSType.UNKNOWN
+                        ),
+                    )
+                ]
+            elif step_name == "score_jobs":
+                state.scored_jobs = [_make_scored_job("Acme", 90)]
+            return state
+
+        @asynccontextmanager
+        async def fake_trace(run_id: str) -> AsyncIterator[Any]:
+            yield None
+
+        # _make_ready_state() has profile + preferences set, so completed_steps
+        # property will infer parse_resume and parse_prefs as done — setup skipped
+        with (
+            patch.object(pipeline, "_run_agent_step", side_effect=fake_step),
+            patch.object(pipeline, "_load_or_create_state", return_value=_make_ready_state()),
+            patch("job_hunter_agents.observability.bind_run_context"),
+            patch("job_hunter_agents.observability.clear_run_context"),
+            patch("job_hunter_agents.observability.trace_pipeline_run", side_effect=fake_trace),
+            patch.object(pipeline, "_log_cost_summary"),
+            patch.object(pipeline, "_set_root_span_attrs"),
+        ):
+            config = RunConfig(resume_path=Path("/tmp/test.pdf"), preferences_text="test")
+            result = await pipeline.run(config)
+
+        assert result.status in ("success", "partial")
+
+    @pytest.mark.asyncio
+    async def test_run_returns_existing_run_result(self) -> None:
+        """If aggregator sets run_result, that result is returned."""
+        settings = make_settings(min_recommended_jobs=1, max_discovery_iterations=1)
+        pipeline = AdaptivePipeline(settings)
+
+        async def fake_step(
+            step_name: str, agent_cls: type, state: PipelineState, start: float
+        ) -> PipelineState:
+            if step_name == "find_companies":
+                state.companies = [
+                    Company(
+                        name="Acme",
+                        domain="acme.com",
+                        career_page=CareerPage(
+                            url="https://acme.com/careers", ats_type=ATSType.UNKNOWN
+                        ),
+                    )
+                ]
+            elif step_name == "score_jobs":
+                state.scored_jobs = [_make_scored_job("Acme", 90)]
+            elif step_name == "aggregate":
+                state.run_result = state.build_result(
+                    status="success",
+                    duration_seconds=5.0,
+                    output_files=["/tmp/results.csv"],
+                )
+            return state
+
+        @asynccontextmanager
+        async def fake_trace(run_id: str) -> AsyncIterator[Any]:
+            yield None
+
+        with (
+            patch.object(pipeline, "_run_agent_step", side_effect=fake_step),
+            patch.object(pipeline, "_load_or_create_state", return_value=_make_ready_state()),
+            patch("job_hunter_agents.observability.bind_run_context"),
+            patch("job_hunter_agents.observability.clear_run_context"),
+            patch("job_hunter_agents.observability.trace_pipeline_run", side_effect=fake_trace),
+            patch.object(pipeline, "_log_cost_summary"),
+            patch.object(pipeline, "_set_root_span_attrs"),
+        ):
+            config = RunConfig(resume_path=Path("/tmp/test.pdf"), preferences_text="test")
+            result = await pipeline.run(config)
+
+        assert "/tmp/results.csv" in [str(f) for f in result.output_files]
+
+
+@pytest.mark.unit
+class TestDiscoveryLoopNonFatalError:
+    """Test non-fatal error handling in discovery loop."""
+
+    @pytest.mark.asyncio
+    async def test_non_fatal_step_continues(self) -> None:
+        """Non-fatal error in scraper step continues to next step."""
+        settings = make_settings(min_recommended_jobs=1, max_discovery_iterations=1)
+        pipeline = AdaptivePipeline(settings)
+        state = _make_ready_state()
+
+        async def fake_step(
+            step_name: str, agent_cls: type, state: PipelineState, start: float
+        ) -> PipelineState | RunResult:
+            if step_name == "find_companies":
+                state.companies = [
+                    Company(
+                        name="Acme",
+                        domain="acme.com",
+                        career_page=CareerPage(
+                            url="https://acme.com/careers", ats_type=ATSType.UNKNOWN
+                        ),
+                    )
+                ]
+            elif step_name == "scrape_jobs":
+                # Non-fatal: scraper timeout returns RunResult
+                return state.build_result(status="failed", duration_seconds=1.0)
+            elif step_name == "score_jobs":
+                state.scored_jobs = [_make_scored_job("Acme", 90)]
+            return state
+
+        with patch.object(pipeline, "_run_agent_step", side_effect=fake_step):
+            result = await pipeline._discovery_loop(state, 0.0)
+
+        # Should still have scored jobs despite scraper failure
+        assert len(result.scored_jobs) >= 1

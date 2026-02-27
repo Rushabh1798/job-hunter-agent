@@ -140,7 +140,8 @@ class AdaptivePipeline(Pipeline):
                 target=min_jobs,
             )
 
-            # Run discovery steps
+            # Run discovery steps — continue on non-fatal errors
+            aborted = False
             for step_name, agent_cls in _DISCOVERY_STEPS:
                 result = await self._run_agent_step(
                     step_name,
@@ -149,10 +150,27 @@ class AdaptivePipeline(Pipeline):
                     pipeline_start,
                 )
                 if isinstance(result, RunResult):
-                    # Fatal error — restore prev scored and return
-                    state.scored_jobs = prev_scored
-                    return state
+                    if step_name == "find_companies":
+                        # No companies = can't continue this iteration
+                        logger.warning(
+                            "discovery_step_failed_skipping",
+                            step=step_name,
+                            iteration=iteration,
+                        )
+                        aborted = True
+                        break
+                    # Non-fatal: scraper/processor/scorer timeout — continue
+                    # with whatever data was accumulated in state so far
+                    logger.warning(
+                        "discovery_step_failed_continuing",
+                        step=step_name,
+                        iteration=iteration,
+                    )
+                    continue
                 state = result
+            if aborted:
+                state.scored_jobs = prev_scored
+                continue
 
             # Merge: keep prev + add only new (deduplicate by content_hash)
             new_scored = [sj for sj in state.scored_jobs if sj.job.content_hash not in prev_hashes]
@@ -172,10 +190,13 @@ class AdaptivePipeline(Pipeline):
                 total_scored=len(state.scored_jobs),
             )
 
-            if len(state.scored_jobs) >= min_jobs:
+            # Count unique companies (aggregator deduplicates to 1 per company)
+            unique_companies = len({sj.job.company_name for sj in state.scored_jobs})
+            if unique_companies >= min_jobs:
                 logger.info(
                     "discovery_target_met",
                     scored=len(state.scored_jobs),
+                    unique_companies=unique_companies,
                     target=min_jobs,
                 )
                 break

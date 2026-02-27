@@ -8,7 +8,7 @@ dependencies = [
     "pydantic>=2.0",
     "pydantic-settings>=2.0",
     # LLM
-    "llm-gateway[anthropic] @ git+https://github.com/Rushabh1798/llm-gateway.git@ae08a91",
+    "llm-gateway[anthropic] @ git+https://github.com/Rushabh1798/llm-gateway.git@619bbc0",
     # Orchestration (for internal agent graphs)
     "langgraph>=0.2",
     # Scraping
@@ -90,6 +90,7 @@ python_version = "3.12"
 strict = true
 warn_unused_ignores = false
 plugins = ["pydantic.mypy"]
+exclude = ["scripts/"]
 
 [[tool.mypy.overrides]]
 module = [

@@ -9,6 +9,7 @@ import structlog
 from pydantic import BaseModel, Field
 
 from job_hunter_agents.agents.base import BaseAgent
+from job_hunter_agents.data.ats_seed_companies import match_seed_companies
 from job_hunter_agents.prompts.company_finder import (
     COMPANY_FINDER_USER,
 )
@@ -29,6 +30,13 @@ class CompanyCandidate(BaseModel):
 
     name: str = Field(description="Company name")
     domain: str = Field(description="Company website domain")
+    career_url: str | None = Field(
+        default=None,
+        description=(
+            "Direct career page or ATS board URL if known "
+            "(e.g., boards.greenhouse.io/stripe, jobs.lever.co/acme)"
+        ),
+    )
     industry: str | None = Field(default=None, description="Industry")
     size: str | None = Field(default=None, description="Company size")
     tier: str = Field(
@@ -58,16 +66,34 @@ class CompanyFinderAgent(BaseAgent):
             msg = "Profile and preferences must be parsed before finding companies"
             raise FatalAgentError(msg)
 
-        # Step 1: Generate candidates
+        # Step 1: Generate LLM candidates
         candidates = await self._generate_candidates(state)
 
-        # Step 2: Validate career pages and detect ATS
-        companies: list[Company] = []
+        # Step 2: Get curated ATS seed companies (guaranteed scrapeable)
+        limit = state.config.company_limit or 20
+        seed_count = max(limit * 2 // 3, 1)  # Reserve ~67% of slots for seed companies
+        seed_companies = self._get_seed_companies(state, set(), seed_count)
+        seed_names = {c.name.lower() for c in seed_companies}
+        if seed_companies:
+            logger.info(
+                "seed_companies_added",
+                count=len(seed_companies),
+                names=[c.name for c in seed_companies],
+            )
+
+        # Step 3: Validate LLM candidates and fill remaining slots
+        companies: list[Company] = list(seed_companies)
+        seen_names: set[str] = set(seed_names)
         for candidate in candidates:
+            if len(companies) >= limit:
+                break
+            if candidate.name.lower() in seen_names:
+                continue
             try:
                 company = await self._validate_and_build(candidate)
                 if company:
                     companies.append(company)
+                    seen_names.add(company.name.lower())
             except Exception as e:
                 self._record_error(state, e, company_name=candidate.name)
 
@@ -144,7 +170,8 @@ class CompanyFinderAgent(BaseAgent):
 
     async def _validate_and_build(self, candidate: CompanyCandidate) -> Company | None:
         """Validate career page exists and build Company model."""
-        career_url = await self._find_career_url(candidate)
+        # Prefer LLM-provided career URL (avoids unreliable web search)
+        career_url = candidate.career_url or await self._find_career_url(candidate)
         if not career_url:
             logger.warning("career_page_not_found", company=candidate.name)
             return None
@@ -193,3 +220,59 @@ class CompanyFinderAgent(BaseAgent):
                 return ats_type, "api"
 
         return ATSType.UNKNOWN, "crawl4ai"
+
+    @staticmethod
+    def _get_seed_companies(
+        state: PipelineState,
+        seen_names: set[str],
+        limit: int,
+    ) -> list[Company]:
+        """Get curated ATS seed companies matching candidate preferences."""
+        prefs = state.preferences
+        profile = state.profile
+        assert prefs is not None
+        assert profile is not None
+
+        industries = prefs.preferred_industries or profile.industries or []
+        locations = prefs.preferred_locations or ([profile.location] if profile.location else [])
+
+        # Exclude already-seen and previously attempted companies (case-insensitive)
+        excluded = seen_names | {n.lower() for n in state.attempted_company_names}
+
+        seeds = match_seed_companies(
+            industries=industries,
+            locations=locations,
+            excluded_names=excluded,
+            limit=limit + len(excluded),
+        )
+
+        ats_type_map = {
+            "greenhouse": ATSType.GREENHOUSE,
+            "lever": ATSType.LEVER,
+            "ashby": ATSType.ASHBY,
+        }
+        ats_url_map = {
+            "greenhouse": "https://boards.greenhouse.io/{slug}",
+            "lever": "https://jobs.lever.co/{slug}",
+            "ashby": "https://jobs.ashbyhq.com/{slug}",
+        }
+
+        results: list[Company] = []
+        for seed in seeds:
+            if seed.name.lower() in excluded:
+                continue
+            results.append(
+                Company(
+                    name=seed.name,
+                    domain=seed.domain,
+                    career_page=CareerPage(
+                        url=ats_url_map[seed.ats].format(slug=seed.slug),
+                        ats_type=ats_type_map[seed.ats],
+                        scrape_strategy="api",
+                    ),
+                    tier=CompanyTier.UNKNOWN,
+                )
+            )
+            if len(results) >= limit:
+                break
+        return results
